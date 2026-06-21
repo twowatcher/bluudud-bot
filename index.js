@@ -15,13 +15,13 @@ const client = new Client({
 
 const PREFIX = '!';
 
-// ==================== READY ====================
+// ==================== BOT ONLINE ====================
 client.once('ready', () => {
-    console.log(`✅ PHANTOM Bot online! 👻`);
+    console.log(`✅ PHANTOM Bot online como ${client.user.tag}`);
     client.user.setActivity('nas sombras 👻', { type: 'WATCHING' });
 });
 
-// Comandos básicos
+// ==================== COMANDOS ====================
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
     if (!message.content.startsWith(PREFIX)) return;
@@ -30,7 +30,7 @@ client.on('messageCreate', async message => {
     const command = args.shift().toLowerCase();
 
     if (command === 'ajuda' || command === 'comandos') {
-        message.reply('**PHANTOM Bot**\n`!ping` - Testar\n`!play` - Música (em breve)\n`!nivel` - Seu nível');
+        message.reply('**👻 PHANTOM Bot**\n`!ping` - Testar\n`!play` - Tocar música\n`!ajuda` - Ver comandos');
     }
 
     if (command === 'ping') {
