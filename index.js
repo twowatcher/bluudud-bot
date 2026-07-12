@@ -97,3 +97,16 @@ client.on('messageCreate', async message => {
 });
 
 client.login(process.env.TOKEN);
+
+// ==================== SERVIDOR PARA RENDER ====================
+const express = require('express');
+const app = express();
+
+app.get('/', (req, res) => {
+    res.send('Bluudud Bot está online! 🔥');
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`🌐 Servidor rodando na porta ${PORT}`);
+});
