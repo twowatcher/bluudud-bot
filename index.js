@@ -857,7 +857,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (commandName === 'matar') {
         const alvo = options.getUser('membro');
-        return interaction.reply(`💀 ${interaction.user} derrubou ${alvo}!`);
+        return interaction.reply(`💀 ${interaction.user} derrubou ${alvo} !https://tenor.com/bMwxK.gif`);
     }
 
     if (commandName === 'correr') {
