@@ -432,7 +432,7 @@ client.on('guildMemberAdd', async (member) => {
 // ==================== READY (REGISTRO GLOBAL AUTOMÁTICO) ====================
 client.once('ready', async () => {
     console.log(`✅ BLUUDUD BOT ONLINE COM SLASH COMMANDS! 🔥`);
-    client.user.setActivity('fazendo moderação com estilo', { type: 3 }); // Tipo 3 é 'WATCHING' na v14
+    client.user.setActivity('fazendo moderação com estilo', { type: 3 });
 
     try {
         console.log('Iniciando o registro dos Slash Commands...');
@@ -620,7 +620,6 @@ client.on('interactionCreate', async (interaction) => {
 
     if (commandName === 'falar') {
         const fala = options.getString('mensagem');
-        // Usamos ephemeral na confirmação para o bot falar "de verdade" no canal principal de forma limpa
         await interaction.reply({ content: 'Enviando...', ephemeral: true });
         return channel.send(fala);
     }
@@ -693,7 +692,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (commandName === 'tapa') {
         const alvo = options.getUser('membro');
-        return interaction.reply(`💥 Ouuuch! ${interaction.user} deu um tapa estalado em ${alvo}! https://tenor.com/bHBn8.gif');
+        return interaction.reply(`💥 Ouuuch! ${interaction.user} deu um tapa estalado em ${alvo}! https://tenor.com/bHBn8.gif`);
     }
 
     if (commandName === 'cantada') {
@@ -713,8 +712,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (commandName === 'elogiar') {
         const alvo = options.getUser('membro');
-        return interaction.reply(`✨ ${alvo}, ${interaction.user} te disse: voce é muito bonita/bonito! 
-            https://tenor.com/dhryROG66Uz.gif');
+        return interaction.reply(`✨ ${alvo}, ${interaction.user} te disse: voce é muito bonita/bonito! https://tenor.com/dhryROG66Uz.gif`);
     }
 
     if (commandName === 'reverso') {
@@ -734,8 +732,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (commandName === 'gado') {
         const alvo = options.getUser('usuario') || interaction.user;
-        return interaction.reply(`🐂 ${alvo.username} é **${Math.floor(Math.random() * 101)}%** gado.
-        https://tenor.com/bNhJr.gif`);
+        return interaction.reply(`🐂 ${alvo.username} é **${Math.floor(Math.random() * 101)}%** gado.\nhttps://tenor.com/bNhJr.gif`);
     }
 
     if (commandName === 'qi') {
@@ -849,20 +846,17 @@ client.on('interactionCreate', async (interaction) => {
 
     if (commandName === 'soco') {
         const alvo = options.getUser('membro');
-        return interaction.reply(`🥊 ${interaction.user} meteu um soco em ${alvo}!
-            https://tenor.com/jItzcdDTiss.gif`);
+        return interaction.reply(`🥊 ${interaction.user} meteu um soco em ${alvo}!\nhttps://tenor.com/jItzcdDTiss.gif`);
     }
 
     if (commandName === 'morder') {
         const alvo = options.getUser('membro');
-        return interaction.reply(`😬 ${interaction.user} deu uma mordida em ${alvo}!
-            https://tenor.com/bXuSq.gif`);
+        return interaction.reply(`😬 ${interaction.user} deu uma mordida em ${alvo}!\nhttps://tenor.com/bXuSq.gif`);
     }
 
     if (commandName === 'matar') {
         const alvo = options.getUser('membro');
-        return interaction.reply(`💀 ${interaction.user} molestou ${alvo}!
-            https://tenor.com/vuJlRyJ0Zpu.gif`);
+        return interaction.reply(`💀 ${interaction.user} molestou ${alvo}!\nhttps://tenor.com/vuJlRyJ0Zpu.gif`);
     }
 
     if (commandName === 'correr') {
