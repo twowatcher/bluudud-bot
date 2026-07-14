@@ -692,11 +692,11 @@ client.on('interactionCreate', async (interaction) => {
 
     if (commandName === 'tapa') {
         const alvo = options.getUser('membro');
-        return interaction.reply(`💥 Ouuuch! ${interaction.user} deu um tapa estalado em ${alvo}! https://tenor.com/bHBn8.gif`);
+        return interaction.reply(`💥 Aiiiiiii! ${interaction.user} deu um tapa guloso em ${alvo}! https://tenor.com/bHBn8.gif`);
     }
 
     if (commandName === 'cantada') {
-        const cantadas = ["Você não é Wi-Fi, mas sinto uma forte conexão.", "Me chama de tabela periódica e diz que rola uma química entre nós."];
+        const cantadas = ["Você não é Wi-Fi, mas sinto uma forte conexão.", "Me chama de tabela periódica e diz que rola uma química entre nós.","voce nao é o pdiddy mas me deixou preto de amor!\nhttps://tenor.com/nwv9cJEGJ9i.gif"];
         return interaction.reply(`😏 ${cantadas[Math.floor(Math.random() * cantadas.length)]}`);
     }
 
@@ -707,12 +707,12 @@ client.on('interactionCreate', async (interaction) => {
 
     if (commandName === 'atacar') {
         const alvo = options.getUser('membro');
-        return interaction.reply(`⚔️ ${interaction.user} atacou gulosamente ${alvo} e causou **${Math.floor(Math.random() * 100)}** de danos gulosos!`);
+        return interaction.reply(`⚔️ ${interaction.user} atacou gulosamente ${alvo} e causou **${Math.floor(Math.random() * 100)}** de danos gulosos!\nhttps://tenor.com/l7kIhyLW9F2.gif`);
     }
 
     if (commandName === 'elogiar') {
         const alvo = options.getUser('membro');
-        return interaction.reply(`✨ ${alvo}, ${interaction.user} te disse: voce é muito bonita/bonito! https://tenor.com/dhryROG66Uz.gif`);
+        return interaction.reply(`✨ ${alvo}, ${interaction.user} te disse: voce é muito gostosa! https://tenor.com/dhryROG66Uz.gif`);
     }
 
     if (commandName === 'reverso') {
@@ -722,7 +722,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (commandName === 'ship') {
         const user2 = options.getUser('membro');
-        return interaction.reply(`❤️ **SHIP:** ${interaction.user.username} + ${user2.username} = **${Math.floor(Math.random() * 101)}%**!`);
+        return interaction.reply(`❤️ **SHIP:** ${interaction.user.username} + ${user2.username} = **${Math.floor(Math.random() * 101)}%**!\nhttps://tenor.com/bVGpT.gif`);
     }
 
     if (commandName === 'chances') {
@@ -836,7 +836,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (commandName === 'hackear') {
         const alvo = options.getUser('membro');
-        return interaction.reply(`💻 Injetando vírus em ${alvo.username}... Senha do e-mail decodificada: \`batatinha123\``);
+        return interaction.reply(`💻 Injetando vírus em ${alvo.username}... Senha do e-mail decodificada: \`p diddy lindinho6767\``);
     }
 
     if (commandName === 'roleta') {
