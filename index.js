@@ -693,7 +693,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (commandName === 'tapa') {
         const alvo = options.getUser('membro');
-        return interaction.reply(`💥 Ouuuch! ${interaction.user} deu um tapa estalado em ${alvo}!`);
+        return interaction.reply(`💥 Ouuuch! ${interaction.user} deu um tapa estalado em ${alvo}!`https://tenor.com/bHBn8.gif);
     }
 
     if (commandName === 'cantada') {
