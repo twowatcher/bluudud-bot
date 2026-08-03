@@ -767,16 +767,16 @@ client.on('interactionCreate', async (interaction) => {
 
 client.login(process.env.TOKEN);
 
-// ==================== EXPRESS + DASHBOARD ====================
+// ==================== EXPRESS + OAUTH2 ====================
 const app = express();
 app.set('trust proxy', 1);
 
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'bluudud-troque-este-segredo-forte',
+    secret: process.env.SESSION_SECRET || 'bluudud-troque-este-segredo',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true,
+        secure: true,        // Render usa HTTPS
         sameSite: 'none',
         maxAge: 1000 * 60 * 60 * 24 * 7
     }
@@ -787,12 +787,16 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI || (process.env.RENDER_EXTERNAL_HOSTNAME
-    ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}/callback`
-    : 'http://localhost:3000/callback');
+const REDIRECT_URI = process.env.REDIRECT_URI || (
+    process.env.RENDER_EXTERNAL_HOSTNAME
+        ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}/callback`
+        : 'http://localhost:3000/callback'
+);
 
 app.get('/login', (req, res) => {
-    if (!CLIENT_ID) return res.status(500).send('CLIENT_ID não configurado');
+    if (!CLIENT_ID) {
+        return res.status(500).send('CLIENT_ID não configurado no ambiente.');
+    }
     const params = new URLSearchParams({
         client_id: CLIENT_ID,
         redirect_uri: REDIRECT_URI,
@@ -805,6 +809,10 @@ app.get('/login', (req, res) => {
 app.get('/callback', async (req, res) => {
     const { code } = req.query;
     if (!code) return res.redirect('/?error=no_code');
+    if (!CLIENT_ID || !CLIENT_SECRET) {
+        return res.status(500).send('CLIENT_ID ou CLIENT_SECRET faltando.');
+    }
+
     try {
         const tokenRes = await axios.post(
             'https://discord.com/api/v10/oauth2/token',
@@ -817,16 +825,19 @@ app.get('/callback', async (req, res) => {
             }),
             { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
         );
+
         const accessToken = tokenRes.data.access_token;
+
         const userRes = await axios.get('https://discord.com/api/v10/users/@me', {
             headers: { Authorization: `Bearer ${accessToken}` }
         });
+
         req.session.user = userRes.data;
         req.session.token = accessToken;
         res.redirect('/');
     } catch (err) {
-        console.error('OAuth:', err.response?.data || err.message);
-        res.status(500).send('Erro OAuth Discord');
+        console.error('OAuth error:', err.response?.data || err.message);
+        res.status(500).send('Erro ao autenticar com o Discord');
     }
 });
 
@@ -840,7 +851,9 @@ app.get('/api/me', (req, res) => {
 });
 
 app.get('/api/servers', async (req, res) => {
-    if (!req.session.user || !req.session.token) return res.status(401).json({ error: 'Não autenticado' });
+    if (!req.session.user || !req.session.token) {
+        return res.status(401).json({ error: 'Não autenticado' });
+    }
     try {
         const response = await axios.get('https://discord.com/api/v10/users/@me/guilds', {
             headers: { Authorization: `Bearer ${req.session.token}` }
@@ -863,7 +876,11 @@ app.get('/api/servers', async (req, res) => {
 app.get('/api/welcome/:guildId', (req, res) => {
     if (!req.session.user) return res.status(401).json({ error: 'Não autenticado' });
     const cfg = configBoasVindas.get(req.params.guildId) || {};
-    res.json({ channelId: cfg.canalId || null, roleId: cfg.cargoId || null, message: cfg.mensagem || null });
+    res.json({
+        channelId: cfg.canalId || null,
+        roleId: cfg.cargoId || null,
+        message: cfg.mensagem || null
+    });
 });
 
 app.post('/api/welcome/:guildId', (req, res) => {
@@ -885,17 +902,19 @@ app.post('/api/welcome/:guildId/test', async (req, res) => {
     if (!g) return res.status(404).json({ error: 'Bot não está no servidor' });
     const ch = g.channels.cache.get(cfg.canalId);
     if (!ch) return res.status(404).json({ error: 'Canal não encontrado' });
+
     let texto = cfg.mensagem || 'Seja bem-vindo(a)!';
     texto = texto
         .replace(/{membro}/g, `<@${req.session.user.id}>`)
         .replace(/{servidor}/g, g.name)
         .replace(/{total}/g, g.memberCount);
+
     try {
         await ch.send({
             embeds: [emb('✨ Teste de boas-vindas', texto, { image: BLUU.dance })]
         });
         res.json({ success: true });
-    } catch (e) {
+    } catch {
         res.status(500).json({ error: 'Erro ao enviar' });
     }
 });
@@ -916,4 +935,4 @@ app.post('/api/ai', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🌐 Dashboard na porta ${PORT}`));
+app.listen(PORT, () => console.log(`🌐 Dashboard OAuth na porta ${PORT}`));
