@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b1a3a">
+  <title>Bluudud Bot — Panel</title>
+  <link rel="icon" href="https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Nunito:wght@400;600;700;800&display=swap');
+
+    :root {
+      --bg: #070f22;
+      --panel: #0d1b36;
+      --panel2: #122445;
+      --blue: #4db8ff;
+      --blue2: #1a7fd4;
+      --cyan: #7ef0ff;
+      --text: #eaf6ff;
+      --muted: #8ab0d0;
+      --ok: #5dffb0;
+      --border: rgba(77, 184, 255, 0.25);
+      --glow: 0 0 24px rgba(77, 184, 255, 0.45);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Nunito', system-ui, sans-serif;
+      overflow-x: hidden;
+    }
+    h1, h2, h3, .font-display {
+      font-family: 'Orbitron', sans-serif;
+      letter-spacing: 0.04em;
+    }
+
+    .bg-layers {
+      position: fixed; inset: 0; z-index: -10;
+      background:
+        radial-gradient(ellipse 80% 50% at 10% 20%, rgba(30, 100, 220, 0.25), transparent),
+        radial-gradient(ellipse 60% 40% at 90% 80%, rgba(0, 180, 255, 0.12), transparent),
+        linear-gradient(180deg, #050b18 0%, #0a1630 50%, #070f22 100%);
+    }
+    .bg-grid {
+      position: fixed; inset: 0; z-index: -9;
+      background-image:
+        linear-gradient(rgba(77,184,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(77,184,255,0.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse at center, black 20%, transparent 75%);
+      pointer-events: none;
+    }
+    .scanlines {
+      position: fixed; inset: 0; z-index: -8;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px);
+      pointer-events: none; opacity: 0.4;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+    @media (max-width: 900px) {
+      .shell { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .sidebar.mobile-open {
+        display: flex; position: fixed; inset: 0; z-index: 80; width: 100%;
+      }
+    }
+
+    .sidebar {
+      background: linear-gradient(180deg, #0a1832 0%, #081428 100%);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      padding: 1.5rem 1rem;
+      position: sticky; top: 0; height: 100vh;
+    }
+    .side-link {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.7rem 1rem; border-radius: 12px;
+      color: var(--muted); cursor: pointer; transition: 0.2s;
+      font-weight: 700; font-size: 0.9rem; border: 1px solid transparent;
+    }
+    .side-link:hover, .side-link.active {
+      color: var(--text);
+      background: rgba(77, 184, 255, 0.12);
+      border-color: var(--border);
+      box-shadow: inset 3px 0 0 var(--blue);
+    }
+
+    .main { padding: 1.5rem 1.75rem 3rem; max-width: 1200px; }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      position: relative; overflow: hidden;
+    }
+    .panel::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--blue), var(--cyan), transparent);
+    }
+
+    .btn-bluu {
+      background: linear-gradient(135deg, var(--blue), var(--blue2));
+      color: #041018; font-weight: 800; border: none;
+      border-radius: 12px; padding: 0.85rem 1.5rem;
+      cursor: pointer; transition: 0.2s; box-shadow: var(--glow);
+      font-family: 'Nunito', sans-serif;
+    }
+    .btn-bluu:hover { transform: translateY(-2px) scale(1.02); filter: brightness(1.1); }
+    .btn-ghost {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text); border-radius: 12px; padding: 0.7rem 1.2rem;
+      cursor: pointer; font-weight: 700;
+    }
+    .btn-ghost:hover { border-color: var(--blue); color: var(--cyan); }
+
+    .page { display: none; animation: fadeUp 0.35s ease; }
+    .page.active { display: block; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .input-bluu {
+      width: 100%; background: #0a1528; border: 1px solid var(--border);
+      color: var(--text); border-radius: 10px; padding: 0.75rem 1rem; outline: none;
+    }
+    .input-bluu:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(77,184,255,0.2);
+    }
+
+    .toast {
+      position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100;
+      background: var(--panel2); border: 1px solid var(--blue);
+      border-radius: 12px; padding: 0.9rem 1.2rem;
+      transform: translateY(120%); opacity: 0; transition: 0.3s;
+      box-shadow: var(--glow);
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    .modal-bg { background: rgba(4, 10, 24, 0.88); backdrop-filter: blur(6px); }
+
+    .char-img {
+      filter: drop-shadow(0 0 30px rgba(77, 184, 255, 0.5));
+      max-height: 320px; object-fit: contain;
+    }
+    .quote-bubble {
+      background: var(--panel2); border: 2px solid var(--blue);
+      border-radius: 16px 16px 16px 4px; padding: 0.85rem 1.1rem;
+      font-weight: 700; box-shadow: var(--glow);
+    }
+
+    .server-tile {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 14px; padding: 1.25rem; transition: 0.25s;
+    }
+    .server-tile:hover {
+      border-color: var(--blue); box-shadow: var(--glow); transform: translateY(-4px);
+    }
+
+    .ai-msg {
+      max-width: 85%; padding: 0.7rem 1rem; border-radius: 14px;
+      font-size: 0.9rem; white-space: pre-wrap; word-break: break-word;
+    }
+    .ai-msg.user {
+      margin-left: auto;
+      background: linear-gradient(135deg, var(--blue), var(--blue2));
+      color: #041018; font-weight: 700;
+    }
+    .ai-msg.bot {
+      margin-right: auto; background: #0a1528; border: 1px solid var(--border);
+    }
+    .ai-msg.system {
+      margin: 0 auto; color: var(--muted); font-size: 0.8rem;
+      text-align: center; background: transparent;
+    }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      background: rgba(77,184,255,0.15); border: 1px solid var(--border);
+      color: var(--cyan); font-size: 0.7rem; font-weight: 800;
+      padding: 0.25rem 0.6rem; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+
+    .gallery-img {
+      width: 100%; height: 160px; object-fit: cover;
+      border-radius: 12px; border: 1px solid var(--border); transition: 0.25s;
+    }
+    .gallery-img:hover { transform: scale(1.03); box-shadow: var(--glow); }
+
+    .topbar-mobile {
+      display: none; align-items: center; justify-content: space-between;
+      padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+      background: var(--panel); position: sticky; top: 0; z-index: 40;
+    }
+    @media (max-width: 900px) {
+      .topbar-mobile { display: flex; }
+      .main { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-layers"></div>
+  <div class="bg-grid"></div>
+  <div class="scanlines"></div>
+
+  <div id="toast" class="toast">
+    <i class="fa-solid fa-check mr-2" style="color:var(--cyan)"></i><span id="toast-text">OK</span>
+  </div>
+
+  <div class="topbar-mobile">
+    <button id="menu-btn" class="btn-ghost px-3 py-2"><i class="fa-solid fa-bars"></i></button>
+    <span class="font-display font-bold text-sm tracking-wider">BLUUDUD</span>
+    <div id="user-area-mobile" class="hidden">
+      <img id="user-avatar-m" class="w-8 h-8 rounded-full border border-[var(--border)]" src="" alt="">
+    </div>
+  </div>
+
+  <div class="shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="flex items-center gap-3 px-2 mb-8">
+        <img src="https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png"
+             alt="Bluudud" class="w-12 h-12 rounded-xl object-cover border-2 border-[var(--blue)]"
+             style="box-shadow: var(--glow)"
+             onerror="this.src='https://cdn.discordapp.com/embed/avatars/1.png'">
+        <div>
+          <p class="font-display font-black text-sm leading-tight">BLUUDUD</p>
+          <p class="text-[10px] text-[var(--muted)] uppercase tracking-widest">Bot Panel</p>
+        </div>
+        <button id="close-menu" class="ml-auto md:hidden btn-ghost px-2 py-1"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <nav class="flex flex-col gap-1 flex-1">
+        <button class="side-link active" data-page="home"><i class="fa-solid fa-house w-5"></i> Início</button>
+        <button class="side-link" data-page="dashboard"><i class="fa-solid fa-server w-5"></i> Servidores</button>
+        <button class="side-link" data-page="character"><i class="fa-solid fa-user-ninja w-5"></i> Personagem</button>
+        <button class="side-link" data-page="commands"><i class="fa-solid fa-terminal w-5"></i> Comandos</button>
+        <button class="side-link" data-page="privacy"><i class="fa-solid fa-shield w-5"></i> Privacidade</button>
+        <button class="side-link" data-page="terms"><i class="fa-solid fa-scroll w-5"></i> Termos</button>
+      </nav>
+
+      <div id="user-area" class="hidden mt-4 panel p-3">
+        <div class="flex items-center gap-3">
+          <img id="user-avatar" class="w-10 h-10 rounded-full border border-[var(--border)]" src="" alt="">
+          <div class="min-w-0 flex-1">
+            <p id="user-name" class="font-bold text-sm truncate">User</p>
+            <p id="user-tag" class="text-xs text-[var(--muted)] truncate">@user</p>
+          </div>
+        </div>
+        <button id="logout-btn" class="btn-ghost w-full mt-3 text-sm py-2">
+          <i class="fa-solid fa-right-from-bracket mr-1"></i> Sair
+        </button>
+      </div>
+
+      <p class="text-[10px] text-[var(--muted)] text-center mt-4 px-2">“IM COOLER BECAUSE IM B;LUE”</p>
+    </aside>
+
+    <div class="main">
+      <section id="home" class="page active">
+        <div class="grid lg:grid-cols-2 gap-8 items-center min-h-[70vh]">
+          <div>
+            <span class="badge mb-4"><span class="w-1.5 h-1.5 rounded-full bg-[var(--ok)] animate-pulse"></span> Online</span>
+            <h1 class="font-display text-4xl md:text-5xl font-black leading-tight mb-4">
+              Things are getting<br>
+              <span style="color:var(--cyan)">a whole lot bluer.</span>
+            </h1>
+            <p class="text-[var(--muted)] text-lg leading-relaxed mb-6 max-w-md">
+              Painel do <strong class="text-[var(--text)]">Bluudud Bot</strong> — moderação, economia, IA e boas-vindas.
+              Inspirado no killer azul de <em>Forsaken</em>.
+            </p>
+            <div class="quote-bubble mb-8 max-w-sm text-sm">tem bluudude get in nowww!!!</div>
+            <button id="login-btn" class="btn-bluu inline-flex items-center gap-3 text-base">
+              <i class="fa-brands fa-discord text-xl"></i> Entrar com Discord
+            </button>
+          </div>
+          <div class="flex flex-col items-center">
+            <img src="https://forsaken.wiki/Special:FilePath/Skinc00l_bluudud_InvIcon.png"
+                 alt="Bluudud render" class="char-img"
+                 onerror="this.src='https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png'">
+            <p class="text-xs text-[var(--muted)] mt-3 text-center">Bluudud · Forsaken (c00lkidd skin)</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="dashboard" class="page">
+        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+          <div>
+            <p class="text-xs uppercase tracking-[0.2em] text-[var(--muted)] mb-1">Painel</p>
+            <h2 class="font-display text-3xl font-black">Servidores</h2>
+          </div>
+          <div class="panel px-4 py-3">
+            <p class="text-xs text-[var(--muted)]">Disponíveis</p>
+            <p id="server-count" class="font-display font-bold" style="color:var(--cyan)">—</p>
+          </div>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3 mb-5">
+          <input id="server-search" class="input-bluu flex-1" type="search" placeholder="Buscar servidor...">
+          <select id="server-sort" class="input-bluu sm:w-44">
+            <option value="name-asc">A → Z</option>
+            <option value="name-desc">Z → A</option>
+          </select>
+        </div>
+        <div id="server-list" class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div class="server-tile h-36 animate-pulse opacity-50"></div>
+          <div class="server-tile h-36 animate-pulse opacity-50"></div>
+        </div>
+      </section>
+
+      <section id="character" class="page">
+        <p class="text-xs uppercase tracking-[0.2em] text-[var(--muted)] mb-1">Forsaken</p>
+        <h2 class="font-display text-3xl font-black mb-6">Bluudud</h2>
+        <div class="grid lg:grid-cols-2 gap-6 mb-8">
+          <div class="panel p-6 flex flex-col items-center">
+            <img src="https://forsaken.wiki/Special:FilePath/Skinc00l_bluudud_InvIcon.png" alt="Bluudud"
+                 class="char-img max-h-64 mb-4"
+                 onerror="this.src='https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png'">
+            <p class="font-display font-bold" style="color:var(--cyan)">“IM COOLER BECAUSE IM B;LUE”</p>
+          </div>
+          <div class="panel p-6 space-y-4 text-sm text-[var(--muted)] leading-relaxed">
+            <p><strong class="text-[var(--text)]">Skin de c00lkidd</strong> em Forsaken. Criado por <strong style="color:var(--cyan)">BaconStripz125</strong>.</p>
+            <p>Corpo azul, cabeça redonda, olhos brancos e três fileiras de dentes. No peito: <em>tem bluudude get in nowww!!!</em></p>
+            <p>Arma: pirulito. Minions de pizza temáticos. Emote e voicelines exclusivas.</p>
+            <div class="quote-bubble text-[var(--text)]">Things are getting a whole lot bluer!</div>
+            <p class="text-xs">Lore: streamer, filho de 118o8, nasceu azul por condição de saúde.</p>
+          </div>
+        </div>
+        <h3 class="font-display font-bold mb-4">Galeria</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <img class="gallery-img" src="https://forsaken.wiki/Special:FilePath/Skinc00l_bluudud_InvIcon.png" alt="Render" onerror="this.style.display='none'">
+          <img class="gallery-img" src="https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png" alt="Graffiti" onerror="this.style.display='none'">
+          <img class="gallery-img object-contain bg-[#0a1528]" src="https://pbs.twimg.com/media/G645nssXQAAj2SD.jpg" alt="Anim" onerror="this.style.display='none'">
+          <img class="gallery-img" src="https://preview.redd.it/xtntvp0jbioe1.png?width=640&format=png&auto=webp" alt="Fanart" onerror="this.style.display='none'">
+        </div>
+      </section>
+
+      <section id="commands" class="page">
+        <p class="text-xs uppercase tracking-[0.2em] text-[var(--muted)] mb-1">Referência</p>
+        <h2 class="font-display text-3xl font-black mb-6">Comandos</h2>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="panel p-5">
+            <h3 class="font-bold mb-2" style="color:var(--cyan)"><i class="fa-solid fa-robot mr-2"></i>IA</h3>
+            <p class="text-sm text-[var(--muted)]">/ai · /traduzir · /resumir · /corrigir · /ai-imagine</p>
+          </div>
+          <div class="panel p-5">
+            <h3 class="font-bold mb-2" style="color:var(--cyan)"><i class="fa-solid fa-shield mr-2"></i>Moderação</h3>
+            <p class="text-sm text-[var(--muted)]">/limpar · /expulsar · /banir · /mutar · /lock · /warn</p>
+          </div>
+          <div class="panel p-5">
+            <h3 class="font-bold mb-2" style="color:var(--cyan)"><i class="fa-solid fa-coins mr-2"></i>Economia</h3>
+            <p class="text-sm text-[var(--muted)]">/saldo · /daily · /trabalhar · /apostar · /roubar · /slots · /ranking</p>
+          </div>
+          <div class="panel p-5">
+            <h3 class="font-bold mb-2" style="color:var(--cyan)"><i class="fa-solid fa-face-laugh mr-2"></i>Diversão</h3>
+            <p class="text-sm text-[var(--muted)]">/meme · /8ball · /ship · /zoar · /jokenpo · /roleta · /rizz</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="privacy" class="page">
+        <div class="panel p-8 max-w-3xl">
+          <h2 class="font-display text-2xl font-black mb-2">Privacidade</h2>
+          <p class="text-xs text-[var(--muted)] mb-6">Atualizado em 3 de agosto de 2026</p>
+          <div class="space-y-5 text-sm text-[var(--muted)] leading-relaxed">
+            <p><strong class="text-[var(--text)]">1.</strong> Coletamos ID, username, avatar e servidores do Discord no login OAuth.</p>
+            <p><strong class="text-[var(--text)]">2.</strong> Uso exclusivo para autenticação e configuração do bot.</p>
+            <p><strong class="text-[var(--text)]">3.</strong> Não vendemos dados. Sessão via cookie seguro.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="terms" class="page">
+        <div class="panel p-8 max-w-3xl">
+          <h2 class="font-display text-2xl font-black mb-2">Termos de Uso</h2>
+          <p class="text-xs text-[var(--muted)] mb-6">Atualizado em 3 de agosto de 2026</p>
+          <div class="space-y-5 text-sm text-[var(--muted)] leading-relaxed">
+            <p><strong class="text-[var(--text)]">1.</strong> Ao usar o Bluudud Bot você aceita estes termos.</p>
+            <p><strong class="text-[var(--text)]">2.</strong> Proibido abuso, spam e uso ilegal.</p>
+            <p><strong class="text-[var(--text)]">3.</strong> O serviço pode ficar offline para manutenção.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="server-modal" class="hidden fixed inset-0 z-50 modal-bg p-4 items-center justify-center">
+    <div class="panel w-full max-w-md p-6">
+      <div class="flex justify-between items-start mb-5">
+        <div>
+          <h3 id="server-modal-name" class="font-display font-bold text-lg">Servidor</h3>
+          <p class="text-xs text-[var(--muted)]">Ações</p>
+        </div>
+        <button id="close-server-modal" class="btn-ghost px-2 py-1"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="space-y-2">
+        <button id="action-welcome" class="w-full panel p-4 text-left flex items-center gap-3 hover:border-[var(--blue)] transition">
+          <i class="fa-solid fa-hand-wave text-lg w-8" style="color:var(--cyan)"></i>
+          <div>
+            <p class="font-bold text-sm">Boas-vindas</p>
+            <p class="text-xs text-[var(--muted)]">Canal, mensagem, cargo</p>
+          </div>
+        </button>
+        <button id="action-ai" class="w-full panel p-4 text-left flex items-center gap-3 hover:border-[var(--blue)] transition">
+          <i class="fa-solid fa-robot text-lg w-8" style="color:var(--cyan)"></i>
+          <div>
+            <p class="font-bold text-sm">Conversar com a IA</p>
+            <p class="text-xs text-[var(--muted)]">Groq · Bluudud</p>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="welcome-modal" class="hidden fixed inset-0 z-50 modal-bg p-4 items-center justify-center">
+    <div class="panel w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between mb-5">
+        <h3 class="font-display font-bold">Boas-vindas</h3>
+        <button id="close-welcome" class="btn-ghost px-2 py-1"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-[var(--muted)]">ID do canal</label>
+          <input id="welcome-channel" class="input-bluu mt-1" placeholder="ID do canal">
+        </div>
+        <div>
+          <label class="text-xs text-[var(--muted)]">Mensagem ({membro} {servidor} {total})</label>
+          <textarea id="welcome-message" class="input-bluu mt-1 min-h-20" placeholder="Seja bem-vindo {membro}!"></textarea>
+        </div>
+        <div>
+          <label class="text-xs text-[var(--muted)]">ID do cargo (opcional)</label>
+          <input id="welcome-role" class="input-bluu mt-1" placeholder="ID do cargo">
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button id="welcome-test" class="btn-ghost flex-1">Testar</button>
+          <button id="welcome-save" class="btn-bluu flex-1">Salvar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="ai-modal" class="hidden fixed inset-0 z-50 modal-bg p-4 items-center justify-center">
+    <div class="panel w-full max-w-xl p-6 flex flex-col max-h-[90vh]">
+      <div class="flex justify-between items-center mb-4">
+        <div class="flex items-center gap-3">
+          <img src="https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png"
+               class="w-10 h-10 rounded-lg object-cover border border-[var(--blue)]" alt=""
+               onerror="this.style.display='none'">
+          <div>
+            <h3 class="font-display font-bold">IA Bluudud</h3>
+            <p class="text-xs text-[var(--muted)]">Powered by Groq</p>
+          </div>
+        </div>
+        <button id="close-ai" class="btn-ghost px-2 py-1"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="ai-messages" class="flex-1 overflow-y-auto space-y-3 mb-4 max-h-80 pr-1">
+        <div class="ai-msg system">Mwehehe! Pergunta aí, streamer.</div>
+      </div>
+      <form id="ai-form" class="flex gap-2">
+        <input id="ai-input" class="input-bluu flex-1" placeholder="Mensagem..." maxlength="1000" autocomplete="off">
+        <button type="submit" class="btn-bluu px-4"><i class="fa-solid fa-paper-plane"></i></button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    const $$ = s => document.querySelectorAll(s);
+    function showToast(msg) {
+      $('#toast-text').textContent = msg;
+      $('#toast').classList.add('show');
+      setTimeout(() => $('#toast').classList.remove('show'), 2200);
+    }
+    let isAuth = false, currentGuildId = null;
+
+    function navigate(page) {
+      if (page === 'dashboard' && !isAuth) { showToast('Faça login primeiro.'); page = 'home'; }
+      $$('.page').forEach(p => p.classList.remove('active'));
+      const el = document.getElementById(page);
+      if (el) el.classList.add('active');
+      $$('.side-link').forEach(l => l.classList.toggle('active', l.dataset.page === page));
+      $('#sidebar')?.classList.remove('mobile-open');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    function escapeHTML(s) {
+      return String(s || '').replace(/[&<>'"]/g, t => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[t]));
+    }
+    function avatarUrl(u) {
+      if (u.id && u.avatar) {
+        const ext = String(u.avatar).startsWith('a_') ? 'gif' : 'png';
+        return `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.${ext}?size=128`;
+      }
+      return `https://cdn.discordapp.com/embed/avatars/${u.id ? Number(BigInt(u.id) >> 22n) % 5 : 0}.png`;
+    }
+    function renderUser(u) {
+      const name = u.global_name || u.username || 'User';
+      const av = avatarUrl(u);
+      $('#user-name').textContent = name;
+      $('#user-tag').textContent = u.username ? `@${u.username}` : '';
+      $('#user-avatar').src = av;
+      $('#user-area').classList.remove('hidden');
+      const um = $('#user-area-mobile');
+      if (um) { um.classList.remove('hidden'); $('#user-avatar-m').src = av; }
+    }
+    async function loadDashboard() {
+      try {
+        const res = await fetch('/api/me', { credentials: 'include' });
+        if (res.status === 401) { isAuth = false; return; }
+        if (!res.ok) throw new Error();
+        const user = await res.json();
+        isAuth = true;
+        renderUser(user);
+        navigate('dashboard');
+        await loadServers();
+      } catch { isAuth = false; }
+    }
+    async function loadServers() {
+      const box = $('#server-list'), count = $('#server-count');
+      try {
+        const res = await fetch('/api/servers', { credentials: 'include' });
+        if (!res.ok) throw new Error();
+        const servers = await res.json();
+        box.innerHTML = '';
+        if (!servers.length) {
+          box.innerHTML = `<div class="panel p-10 text-center col-span-full"><i class="fa-solid fa-ghost text-3xl mb-3" style="color:var(--blue)"></i><p class="font-bold">Nenhum servidor</p><p class="text-sm text-[var(--muted)]">Precisa de permissão de gerenciar.</p></div>`;
+          count.textContent = '0'; return;
+        }
+        count.textContent = String(servers.length);
+        servers.forEach(s => {
+          const name = escapeHTML(s.name || 'Servidor');
+          const icon = s.icon
+            ? `<img src="https://cdn.discordapp.com/icons/${s.id}/${s.icon}.${s.icon.startsWith('a_')?'gif':'png'}?size=64" class="w-12 h-12 rounded-xl object-cover border border-[var(--border)]">`
+            : `<div class="w-12 h-12 rounded-xl border border-[var(--border)] flex items-center justify-center font-display font-bold" style="background:rgba(77,184,255,.2);color:var(--cyan)">${name.slice(0,2).toUpperCase()}</div>`;
+          const tile = document.createElement('div');
+          tile.className = 'server-tile flex flex-col justify-between min-h-[140px]';
+          tile.dataset.serverName = (s.name || '').toLowerCase();
+          tile.innerHTML = `<div class="flex items-center gap-3">${icon}<div class="min-w-0"><p class="text-[10px] uppercase tracking-widest text-[var(--muted)]">Discord</p><p class="font-bold truncate">${name}</p></div></div><button class="cfg btn-bluu w-full mt-4 py-2.5 text-sm">Configurar</button>`;
+          tile.querySelector('.cfg').onclick = () => {
+            currentGuildId = s.id;
+            $('#server-modal-name').textContent = s.name || 'Servidor';
+            $('#server-modal').classList.remove('hidden');
+            $('#server-modal').classList.add('flex');
+          };
+          box.appendChild(tile);
+        });
+      } catch {
+        box.innerHTML = `<div class="panel p-10 text-center col-span-full"><p class="font-bold">Erro ao carregar</p></div>`;
+        count.textContent = 'Erro';
+      }
+    }
+    function appendMsg(t, role) {
+      const c = $('#ai-messages');
+      const d = document.createElement('div');
+      d.className = `ai-msg ${role}`;
+      d.textContent = t;
+      c.appendChild(d);
+      c.scrollTop = c.scrollHeight;
+    }
+    async function sendAi(text) {
+      if (!text.trim()) return;
+      appendMsg(text, 'user');
+      $('#ai-input').value = '';
+      const tip = document.createElement('div');
+      tip.className = 'ai-msg bot'; tip.id = 'typing'; tip.textContent = '...';
+      $('#ai-messages').appendChild(tip);
+      try {
+        const res = await fetch('/api/ai', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text })
+        });
+        tip.remove();
+        const data = await res.json().catch(() => ({}));
+        appendMsg(res.ok ? (data.reply || '...') : (data.error || 'Erro'), 'bot');
+      } catch { tip.remove(); appendMsg('Falha de conexão.', 'bot'); }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      $$('.side-link').forEach(l => l.addEventListener('click', () => navigate(l.dataset.page)));
+      $('#login-btn')?.addEventListener('click', () => location.href = '/login');
+      $('#logout-btn')?.addEventListener('click', () => location.href = '/logout');
+      $('#menu-btn')?.addEventListener('click', () => $('#sidebar').classList.add('mobile-open'));
+      $('#close-menu')?.addEventListener('click', () => $('#sidebar').classList.remove('mobile-open'));
+
+      $('#close-server-modal')?.addEventListener('click', () => {
+        $('#server-modal').classList.add('hidden'); $('#server-modal').classList.remove('flex');
+      });
+      $('#server-modal')?.addEventListener('click', e => {
+        if (e.target === $('#server-modal')) {
+          $('#server-modal').classList.add('hidden'); $('#server-modal').classList.remove('flex');
+        }
+      });
+      $('#action-ai')?.addEventListener('click', () => {
+        $('#server-modal').classList.add('hidden'); $('#server-modal').classList.remove('flex');
+        $('#ai-modal').classList.remove('hidden'); $('#ai-modal').classList.add('flex');
+      });
+      $('#close-ai')?.addEventListener('click', () => {
+        $('#ai-modal').classList.add('hidden'); $('#ai-modal').classList.remove('flex');
+      });
+      $('#ai-form')?.addEventListener('submit', e => { e.preventDefault(); sendAi($('#ai-input').value); });
+
+      $('#action-welcome')?.addEventListener('click', () => {
+        $('#server-modal').classList.add('hidden'); $('#server-modal').classList.remove('flex');
+        $('#welcome-modal').classList.remove('hidden'); $('#welcome-modal').classList.add('flex');
+        if (currentGuildId) {
+          fetch(`/api/welcome/${currentGuildId}`, { credentials: 'include' })
+            .then(r => r.json())
+            .then(c => {
+              if (c.channelId) $('#welcome-channel').value = c.channelId;
+              if (c.message) $('#welcome-message').value = c.message;
+              if (c.roleId) $('#welcome-role').value = c.roleId;
+            }).catch(() => {});
+        }
+      });
+      $('#close-welcome')?.addEventListener('click', () => {
+        $('#welcome-modal').classList.add('hidden'); $('#welcome-modal').classList.remove('flex');
+      });
+      $('#welcome-save')?.addEventListener('click', async () => {
+        if (!currentGuildId) return;
+        const res = await fetch(`/api/welcome/${currentGuildId}`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            channelId: $('#welcome-channel').value.trim() || null,
+            message: $('#welcome-message').value.trim() || null,
+            roleId: $('#welcome-role').value.trim() || null
+          })
+        });
+        showToast(res.ok ? 'Salvo!' : 'Erro ao salvar');
+        if (res.ok) { $('#welcome-modal').classList.add('hidden'); $('#welcome-modal').classList.remove('flex'); }
+      });
+      $('#welcome-test')?.addEventListener('click', async () => {
+        if (!currentGuildId) return;
+        const res = await fetch(`/api/welcome/${currentGuildId}/test`, { method: 'POST', credentials: 'include' });
+        const d = await res.json().catch(() => ({}));
+        showToast(res.ok ? 'Teste enviado!' : (d.error || 'Erro'));
+      });
+      $('#server-search')?.addEventListener('input', () => {
+        const q = $('#server-search').value.toLowerCase();
+        $$('#server-list .server-tile').forEach(t => {
+          t.style.display = (t.dataset.serverName || '').includes(q) ? '' : 'none';
+        });
+      });
+      loadDashboard();
+    });
+  </script>
+</body>
+</html>
