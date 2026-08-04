@@ -196,12 +196,26 @@ const commandsData = [
 // ==================== READY ====================
 client.once('ready', async () => {
     console.log(`💙 Bluudud online como ${client.user.tag}`);
+
     try {
-        await client.application.commands.set(commandsData);
-        console.log(`✅ ${commandsData.length} comandos registrados`);
+        // === MODO RÁPIDO: registra só no servidor (aparece quase instantâneo) ===
+        const GUILD_ID = '1529716247468703795'; // clique com direito no servidor → Copiar ID do Servidor
+
+        const guild = client.guilds.cache.get(GUILD_ID);
+        if (guild) {
+            await guild.commands.set(commandsData);
+            console.log(`✅ ${commandsData.length} comandos registrados no servidor ${guild.name}`);
+        } else {
+            console.log('❌ Servidor não encontrado. Verifique o GUILD_ID');
+        }
+
+        // Se quiser voltar para global depois, use esta linha:
+        // await client.application.commands.set(commandsData);
+
     } catch (e) {
         console.error('Erro ao registrar comandos:', e);
     }
+
     client.user.setActivity('tem bluudude get in nowww!!!', { type: 3 });
 });
 
