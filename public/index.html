@@ -2,8 +2,9 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0b1a3a">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#070f22">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Bluudud Bot — Panel</title>
   <link rel="icon" href="https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -21,80 +22,112 @@
       --text: #eaf6ff;
       --muted: #8ab0d0;
       --ok: #5dffb0;
+      --warn: #ffb84d;
       --border: rgba(77, 184, 255, 0.25);
-      --glow: 0 0 24px rgba(77, 184, 255, 0.45);
+      --glow: 0 0 28px rgba(77, 184, 255, 0.4);
     }
 
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { scroll-behavior: smooth; }
     body {
-      margin: 0;
-      min-height: 100vh;
-      background: var(--bg);
-      color: var(--text);
+      margin: 0; min-height: 100vh; min-height: 100dvh;
+      background: var(--bg); color: var(--text);
       font-family: 'Nunito', system-ui, sans-serif;
       overflow-x: hidden;
     }
-    h1, h2, h3, .font-display {
-      font-family: 'Orbitron', sans-serif;
-      letter-spacing: 0.04em;
-    }
+    h1,h2,h3,.font-display { font-family: 'Orbitron', sans-serif; letter-spacing: 0.04em; }
 
+    /* ===== FUNDO ANIMADO ===== */
     .bg-layers {
       position: fixed; inset: 0; z-index: -10;
       background:
-        radial-gradient(ellipse 80% 50% at 10% 20%, rgba(30, 100, 220, 0.25), transparent),
-        radial-gradient(ellipse 60% 40% at 90% 80%, rgba(0, 180, 255, 0.12), transparent),
-        linear-gradient(180deg, #050b18 0%, #0a1630 50%, #070f22 100%);
+        radial-gradient(ellipse 90% 60% at 15% 10%, rgba(30,100,220,0.28), transparent 55%),
+        radial-gradient(ellipse 70% 50% at 85% 90%, rgba(0,180,255,0.14), transparent 50%),
+        linear-gradient(180deg, #050b18 0%, #0a1630 45%, #070f22 100%);
     }
     .bg-grid {
       position: fixed; inset: 0; z-index: -9;
       background-image:
-        linear-gradient(rgba(77,184,255,0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(77,184,255,0.04) 1px, transparent 1px);
-      background-size: 48px 48px;
-      mask-image: radial-gradient(ellipse at center, black 20%, transparent 75%);
+        linear-gradient(rgba(77,184,255,0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(77,184,255,0.045) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: radial-gradient(ellipse at center, black 15%, transparent 72%);
+      animation: gridDrift 40s linear infinite;
       pointer-events: none;
     }
+    @keyframes gridDrift {
+      from { background-position: 0 0; }
+      to { background-position: 44px 44px; }
+    }
+    .orb {
+      position: fixed; border-radius: 50%; filter: blur(60px);
+      pointer-events: none; z-index: -8; opacity: 0.45;
+      animation: orbFloat 18s ease-in-out infinite;
+    }
+    .orb.a { width: 280px; height: 280px; background: #1a7fd4; top: 10%; left: -5%; }
+    .orb.b { width: 220px; height: 220px; background: #4db8ff; bottom: 15%; right: -4%; animation-delay: -6s; }
+    .orb.c { width: 160px; height: 160px; background: #7ef0ff; top: 55%; left: 40%; animation-delay: -12s; opacity: 0.25; }
+    @keyframes orbFloat {
+      0%,100% { transform: translate(0,0) scale(1); }
+      33% { transform: translate(30px,-40px) scale(1.08); }
+      66% { transform: translate(-20px,25px) scale(0.95); }
+    }
     .scanlines {
-      position: fixed; inset: 0; z-index: -8;
-      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px);
-      pointer-events: none; opacity: 0.4;
+      position: fixed; inset: 0; z-index: -7;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.07) 2px, rgba(0,0,0,.07) 4px);
+      pointer-events: none; opacity: 0.35;
     }
 
+    /* ===== LAYOUT ===== */
     .shell {
       display: grid;
       grid-template-columns: 260px 1fr;
-      min-height: 100vh;
+      min-height: 100vh; min-height: 100dvh;
     }
     @media (max-width: 900px) {
       .shell { grid-template-columns: 1fr; }
-      .sidebar { display: none; }
-      .sidebar.mobile-open {
-        display: flex; position: fixed; inset: 0; z-index: 80; width: 100%;
+      .sidebar {
+        display: none; position: fixed; inset: 0; z-index: 90;
+        width: min(300px, 88vw); height: 100%; height: 100dvh;
       }
+      .sidebar.mobile-open { display: flex; }
+      .sidebar-backdrop {
+        display: none; position: fixed; inset: 0; z-index: 85;
+        background: rgba(4,10,24,0.75); backdrop-filter: blur(4px);
+      }
+      .sidebar-backdrop.show { display: block; }
     }
 
     .sidebar {
-      background: linear-gradient(180deg, #0a1832 0%, #081428 100%);
+      background: linear-gradient(180deg, #0a1832 0%, #071222 100%);
       border-right: 1px solid var(--border);
       display: flex; flex-direction: column;
-      padding: 1.5rem 1rem;
-      position: sticky; top: 0; height: 100vh;
+      padding: 1.25rem 0.85rem;
+      position: sticky; top: 0; height: 100vh; height: 100dvh;
+      overflow-y: auto;
     }
     .side-link {
-      display: flex; align-items: center; gap: 0.75rem;
-      padding: 0.7rem 1rem; border-radius: 12px;
+      display: flex; align-items: center; gap: 0.7rem;
+      padding: 0.72rem 0.95rem; border-radius: 12px;
       color: var(--muted); cursor: pointer; transition: 0.2s;
-      font-weight: 700; font-size: 0.9rem; border: 1px solid transparent;
+      font-weight: 700; font-size: 0.88rem; border: 1px solid transparent;
+      width: 100%; background: none; text-align: left;
     }
     .side-link:hover, .side-link.active {
       color: var(--text);
-      background: rgba(77, 184, 255, 0.12);
+      background: rgba(77,184,255,0.12);
       border-color: var(--border);
       box-shadow: inset 3px 0 0 var(--blue);
     }
 
-    .main { padding: 1.5rem 1.75rem 3rem; max-width: 1200px; }
+    .main {
+      padding: 1.25rem 1.5rem 5rem;
+      max-width: 1100px; width: 100%;
+      margin: 0 auto;
+    }
+    @media (max-width: 900px) {
+      .main { padding: 0.85rem 0.85rem 6rem; }
+    }
 
     .panel {
       background: var(--panel);
@@ -104,135 +137,190 @@
     }
     .panel::before {
       content: '';
-      position: absolute; top: 0; left: 0; right: 0; height: 3px;
-      background: linear-gradient(90deg, var(--blue), var(--cyan), transparent);
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--blue), var(--cyan), transparent 70%);
     }
 
     .btn-bluu {
       background: linear-gradient(135deg, var(--blue), var(--blue2));
       color: #041018; font-weight: 800; border: none;
-      border-radius: 12px; padding: 0.85rem 1.5rem;
+      border-radius: 12px; padding: 0.8rem 1.35rem;
       cursor: pointer; transition: 0.2s; box-shadow: var(--glow);
-      font-family: 'Nunito', sans-serif;
+      font-family: 'Nunito', sans-serif; font-size: 0.95rem;
     }
-    .btn-bluu:hover { transform: translateY(-2px) scale(1.02); filter: brightness(1.1); }
+    .btn-bluu:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.08); }
+    .btn-bluu:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
     .btn-ghost {
       background: transparent; border: 1px solid var(--border);
-      color: var(--text); border-radius: 12px; padding: 0.7rem 1.2rem;
-      cursor: pointer; font-weight: 700;
+      color: var(--text); border-radius: 12px; padding: 0.65rem 1.1rem;
+      cursor: pointer; font-weight: 700; font-size: 0.9rem;
     }
     .btn-ghost:hover { border-color: var(--blue); color: var(--cyan); }
 
     .page { display: none; animation: fadeUp 0.35s ease; }
     .page.active { display: block; }
     @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(16px); }
-      to { opacity: 1; transform: translateY(0); }
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: none; }
     }
 
     .input-bluu {
       width: 100%; background: #0a1528; border: 1px solid var(--border);
-      color: var(--text); border-radius: 10px; padding: 0.75rem 1rem; outline: none;
+      color: var(--text); border-radius: 12px; padding: 0.8rem 1rem; outline: none;
+      font-size: 16px; /* evita zoom iOS */
     }
     .input-bluu:focus {
       border-color: var(--blue);
-      box-shadow: 0 0 0 3px rgba(77,184,255,0.2);
+      box-shadow: 0 0 0 3px rgba(77,184,255,0.18);
     }
 
     .toast {
-      position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100;
-      background: var(--panel2); border: 1px solid var(--blue);
-      border-radius: 12px; padding: 0.9rem 1.2rem;
-      transform: translateY(120%); opacity: 0; transition: 0.3s;
-      box-shadow: var(--glow);
+      position: fixed; bottom: 1.25rem; left: 50%; transform: translate(-50%, 140%);
+      z-index: 200; background: var(--panel2); border: 1px solid var(--blue);
+      border-radius: 14px; padding: 0.85rem 1.25rem; opacity: 0; transition: 0.3s;
+      box-shadow: var(--glow); max-width: 90vw; text-align: center; font-weight: 700;
     }
-    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.show { transform: translate(-50%, 0); opacity: 1; }
 
-    .modal-bg { background: rgba(4, 10, 24, 0.88); backdrop-filter: blur(6px); }
-
-    .char-img {
-      filter: drop-shadow(0 0 30px rgba(77, 184, 255, 0.5));
-      max-height: 320px; object-fit: contain;
-    }
-    .quote-bubble {
-      background: var(--panel2); border: 2px solid var(--blue);
-      border-radius: 16px 16px 16px 4px; padding: 0.85rem 1.1rem;
-      font-weight: 700; box-shadow: var(--glow);
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      background: rgba(77,184,255,0.14); border: 1px solid var(--border);
+      color: var(--cyan); font-size: 0.68rem; font-weight: 800;
+      padding: 0.28rem 0.65rem; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: 0.06em;
     }
 
-    .server-tile {
+    .topbar-mobile {
+      display: none; align-items: center; justify-content: space-between;
+      padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--border);
+      background: rgba(13,27,54,0.92); backdrop-filter: blur(10px);
+      position: sticky; top: 0; z-index: 40;
+    }
+    @media (max-width: 900px) { .topbar-mobile { display: flex; } }
+
+    /* cards perfil / rank */
+    .stat-card {
       background: var(--panel); border: 1px solid var(--border);
-      border-radius: 14px; padding: 1.25rem; transition: 0.25s;
+      border-radius: 14px; padding: 1rem 1.1rem;
     }
-    .server-tile:hover {
-      border-color: var(--blue); box-shadow: var(--glow); transform: translateY(-4px);
+    .xp-bar {
+      height: 10px; border-radius: 999px; background: #0a1520; overflow: hidden;
     }
+    .xp-fill {
+      height: 100%; border-radius: 999px;
+      background: linear-gradient(90deg, var(--blue), var(--cyan));
+      transition: width 0.6s ease;
+    }
+    .rank-row {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.7rem 0.85rem; border-radius: 12px;
+      border: 1px solid transparent; transition: 0.2s;
+    }
+    .rank-row:hover { background: rgba(77,184,255,0.08); border-color: var(--border); }
+    .rank-row.me { background: rgba(77,184,255,0.14); border-color: var(--blue); }
 
+    /* AI PAGE full */
+    .ai-page-wrap {
+      display: flex; flex-direction: column;
+      height: calc(100vh - 2.5rem); height: calc(100dvh - 2.5rem);
+      max-height: 820px;
+    }
+    @media (max-width: 900px) {
+      .ai-page-wrap { height: calc(100dvh - 7rem); max-height: none; }
+    }
     .ai-msg {
-      max-width: 85%; padding: 0.7rem 1rem; border-radius: 14px;
-      font-size: 0.9rem; white-space: pre-wrap; word-break: break-word;
+      max-width: min(88%, 520px); padding: 0.75rem 1rem; border-radius: 16px;
+      font-size: 0.92rem; white-space: pre-wrap; word-break: break-word; line-height: 1.45;
     }
     .ai-msg.user {
       margin-left: auto;
       background: linear-gradient(135deg, var(--blue), var(--blue2));
-      color: #041018; font-weight: 700;
+      color: #041018; font-weight: 700; border-radius: 16px 16px 4px 16px;
     }
     .ai-msg.bot {
       margin-right: auto; background: #0a1528; border: 1px solid var(--border);
+      border-radius: 16px 16px 16px 4px;
     }
     .ai-msg.system {
-      margin: 0 auto; color: var(--muted); font-size: 0.8rem;
-      text-align: center; background: transparent;
+      margin: 0 auto; color: var(--muted); font-size: 0.78rem;
+      text-align: center; background: transparent; max-width: 100%;
     }
 
-    .badge {
-      display: inline-flex; align-items: center; gap: 0.35rem;
-      background: rgba(77,184,255,0.15); border: 1px solid var(--border);
-      color: var(--cyan); font-size: 0.7rem; font-weight: 800;
-      padding: 0.25rem 0.6rem; border-radius: 999px;
-      text-transform: uppercase; letter-spacing: 0.06em;
+    .server-tile {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 14px; padding: 1.1rem; transition: 0.25s;
+    }
+    .server-tile:hover {
+      border-color: var(--blue); box-shadow: var(--glow); transform: translateY(-3px);
     }
 
-    .gallery-img {
-      width: 100%; height: 160px; object-fit: cover;
-      border-radius: 12px; border: 1px solid var(--border); transition: 0.25s;
+    .char-img {
+      filter: drop-shadow(0 0 28px rgba(77,184,255,0.5));
+      max-height: 280px; object-fit: contain;
     }
-    .gallery-img:hover { transform: scale(1.03); box-shadow: var(--glow); }
+    .quote-bubble {
+      background: var(--panel2); border: 2px solid var(--blue);
+      border-radius: 16px 16px 16px 4px; padding: 0.8rem 1rem;
+      font-weight: 700; box-shadow: var(--glow);
+    }
 
-    .topbar-mobile {
-      display: none; align-items: center; justify-content: space-between;
-      padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
-      background: var(--panel); position: sticky; top: 0; z-index: 40;
+    /* bottom nav mobile */
+    .bottom-nav {
+      display: none;
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+      background: rgba(10,24,50,0.95); backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      padding: 0.4rem 0.5rem calc(0.4rem + env(safe-area-inset-bottom));
+      justify-content: space-around;
     }
     @media (max-width: 900px) {
-      .topbar-mobile { display: flex; }
-      .main { padding: 1rem; }
+      .bottom-nav { display: flex; }
     }
+    .bnav-btn {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+      background: none; border: none; color: var(--muted); font-size: 0.65rem;
+      font-weight: 800; padding: 0.4rem; cursor: pointer; border-radius: 10px;
+    }
+    .bnav-btn i { font-size: 1.15rem; }
+    .bnav-btn.active { color: var(--cyan); }
+
+    .toggle {
+      width: 44px; height: 24px; border-radius: 999px; background: #1a2a40;
+      border: 1px solid var(--border); position: relative; cursor: pointer; transition: 0.2s;
+    }
+    .toggle.on { background: rgba(77,184,255,0.35); border-color: var(--blue); }
+    .toggle::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 18px; height: 18px; border-radius: 50%; background: var(--muted); transition: 0.2s;
+    }
+    .toggle.on::after { left: 22px; background: var(--cyan); }
   </style>
 </head>
 <body>
   <div class="bg-layers"></div>
   <div class="bg-grid"></div>
+  <div class="orb a"></div>
+  <div class="orb b"></div>
+  <div class="orb c"></div>
   <div class="scanlines"></div>
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
-  <div id="toast" class="toast">
-    <i class="fa-solid fa-check mr-2" style="color:var(--cyan)"></i><span id="toast-text">OK</span>
-  </div>
+  <div id="toast" class="toast"><span id="toast-text">OK</span></div>
 
   <div class="topbar-mobile">
-    <button id="menu-btn" class="btn-ghost px-3 py-2"><i class="fa-solid fa-bars"></i></button>
+    <button id="menu-btn" class="btn-ghost px-3 py-2" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
     <span class="font-display font-bold text-sm tracking-wider">BLUUDUD</span>
     <div id="user-area-mobile" class="hidden">
-      <img id="user-avatar-m" class="w-8 h-8 rounded-full border border-[var(--border)]" src="" alt="">
+      <img id="user-avatar-m" class="w-8 h-8 rounded-full border border-[var(--border)]" alt="">
     </div>
   </div>
 
   <div class="shell">
     <aside class="sidebar" id="sidebar">
-      <div class="flex items-center gap-3 px-2 mb-8">
+      <div class="flex items-center gap-3 px-2 mb-6">
         <img src="https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png"
-             alt="Bluudud" class="w-12 h-12 rounded-xl object-cover border-2 border-[var(--blue)]"
-             style="box-shadow: var(--glow)"
+             alt="Bluudud" class="w-11 h-11 rounded-xl object-cover border-2 border-[var(--blue)]"
+             style="box-shadow:var(--glow)"
              onerror="this.src='https://cdn.discordapp.com/embed/avatars/1.png'">
         <div>
           <p class="font-display font-black text-sm leading-tight">BLUUDUD</p>
@@ -243,16 +331,20 @@
 
       <nav class="flex flex-col gap-1 flex-1">
         <button class="side-link active" data-page="home"><i class="fa-solid fa-house w-5"></i> Início</button>
+        <button class="side-link" data-page="me"><i class="fa-solid fa-id-card w-5"></i> Meu perfil</button>
+        <button class="side-link" data-page="rank"><i class="fa-solid fa-trophy w-5"></i> Rank universal</button>
+        <button class="side-link" data-page="ai-page"><i class="fa-solid fa-robot w-5"></i> IA Bluudud</button>
         <button class="side-link" data-page="dashboard"><i class="fa-solid fa-server w-5"></i> Servidores</button>
         <button class="side-link" data-page="character"><i class="fa-solid fa-user-ninja w-5"></i> Personagem</button>
         <button class="side-link" data-page="commands"><i class="fa-solid fa-terminal w-5"></i> Comandos</button>
+        <button class="side-link" data-page="settings"><i class="fa-solid fa-sliders w-5"></i> Configurações</button>
         <button class="side-link" data-page="privacy"><i class="fa-solid fa-shield w-5"></i> Privacidade</button>
         <button class="side-link" data-page="terms"><i class="fa-solid fa-scroll w-5"></i> Termos</button>
       </nav>
 
-      <div id="user-area" class="hidden mt-4 panel p-3">
+      <div id="user-area" class="hidden mt-3 panel p-3">
         <div class="flex items-center gap-3">
-          <img id="user-avatar" class="w-10 h-10 rounded-full border border-[var(--border)]" src="" alt="">
+          <img id="user-avatar" class="w-10 h-10 rounded-full border border-[var(--border)]" alt="">
           <div class="min-w-0 flex-1">
             <p id="user-name" class="font-bold text-sm truncate">User</p>
             <p id="user-tag" class="text-xs text-[var(--muted)] truncate">@user</p>
@@ -262,168 +354,268 @@
           <i class="fa-solid fa-right-from-bracket mr-1"></i> Sair
         </button>
       </div>
-
-      <p class="text-[10px] text-[var(--muted)] text-center mt-4 px-2">“IM COOLER BECAUSE IM B;LUE”</p>
+      <p class="text-[10px] text-[var(--muted)] text-center mt-3 px-2">“IM COOLER BECAUSE IM B;LUE”</p>
     </aside>
 
     <div class="main">
+      <!-- HOME -->
       <section id="home" class="page active">
-        <div class="grid lg:grid-cols-2 gap-8 items-center min-h-[70vh]">
+        <div class="grid lg:grid-cols-2 gap-8 items-center min-h-[65vh]">
           <div>
             <span class="badge mb-4"><span class="w-1.5 h-1.5 rounded-full bg-[var(--ok)] animate-pulse"></span> Online</span>
-            <h1 class="font-display text-4xl md:text-5xl font-black leading-tight mb-4">
+            <h1 class="font-display text-3xl sm:text-4xl md:text-5xl font-black leading-tight mb-4">
               Things are getting<br>
               <span style="color:var(--cyan)">a whole lot bluer.</span>
             </h1>
-            <p class="text-[var(--muted)] text-lg leading-relaxed mb-6 max-w-md">
-              Painel do <strong class="text-[var(--text)]">Bluudud Bot</strong> — moderação, economia, IA e boas-vindas.
-              Inspirado no killer azul de <em>Forsaken</em>.
+            <p class="text-[var(--muted)] text-base sm:text-lg leading-relaxed mb-5 max-w-md">
+              Painel do <strong class="text-[var(--text)]">Bluudud Bot</strong> — rank, daily, IA, economia e configs.
             </p>
-            <div class="quote-bubble mb-8 max-w-sm text-sm">tem bluudude get in nowww!!!</div>
-            <button id="login-btn" class="btn-bluu inline-flex items-center gap-3 text-base">
-              <i class="fa-brands fa-discord text-xl"></i> Entrar com Discord
-            </button>
+            <div class="quote-bubble mb-6 max-w-sm text-sm">tem bluudude get in nowww!!!</div>
+            <div class="flex flex-wrap gap-3">
+              <button id="login-btn" class="btn-bluu inline-flex items-center gap-2">
+                <i class="fa-brands fa-discord text-xl"></i> Entrar com Discord
+              </button>
+              <button class="btn-ghost" data-goto="ai-page"><i class="fa-solid fa-robot mr-1"></i> Falar com a IA</button>
+            </div>
           </div>
           <div class="flex flex-col items-center">
             <img src="https://forsaken.wiki/Special:FilePath/Skinc00l_bluudud_InvIcon.png"
-                 alt="Bluudud render" class="char-img"
+                 alt="Bluudud" class="char-img"
                  onerror="this.src='https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png'">
-            <p class="text-xs text-[var(--muted)] mt-3 text-center">Bluudud · Forsaken (c00lkidd skin)</p>
           </div>
         </div>
       </section>
 
+      <!-- MEU PERFIL + DAILY -->
+      <section id="me" class="page">
+        <p class="text-xs uppercase tracking-[0.2em] text-[var(--muted)] mb-1">Conta</p>
+        <h2 class="font-display text-2xl sm:text-3xl font-black mb-5">Meu perfil</h2>
+
+        <div id="me-guest" class="panel p-8 text-center">
+          <p class="font-bold mb-3">Faça login para ver seu perfil</p>
+          <button class="btn-bluu" onclick="location.href='/login'"><i class="fa-brands fa-discord mr-2"></i>Entrar</button>
+        </div>
+
+        <div id="me-content" class="hidden space-y-4">
+          <div class="panel p-5 flex flex-col sm:flex-row gap-5 items-center sm:items-start">
+            <img id="me-avatar" class="w-24 h-24 rounded-2xl border-2 border-[var(--blue)] object-cover" style="box-shadow:var(--glow)" alt="">
+            <div class="flex-1 text-center sm:text-left w-full">
+              <p id="me-tagline" class="text-sm" style="color:var(--cyan)"></p>
+              <h3 id="me-name" class="font-display font-black text-xl mb-1">—</h3>
+              <p id="me-username" class="text-sm text-[var(--muted)] mb-3">@—</p>
+              <div class="xp-bar mb-1"><div id="me-xp-fill" class="xp-fill" style="width:0%"></div></div>
+              <p id="me-xp-label" class="text-xs text-[var(--muted)]">0 / 100 XP</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="stat-card text-center">
+              <p class="text-[10px] uppercase text-[var(--muted)] tracking-wider">Nível</p>
+              <p id="me-level" class="font-display font-black text-2xl" style="color:var(--cyan)">—</p>
+            </div>
+            <div class="stat-card text-center">
+              <p class="text-[10px] uppercase text-[var(--muted)] tracking-wider">Coins</p>
+              <p id="me-coins" class="font-display font-black text-2xl">—</p>
+            </div>
+            <div class="stat-card text-center">
+              <p class="text-[10px] uppercase text-[var(--muted)] tracking-wider">Rep</p>
+              <p id="me-rep" class="font-display font-black text-2xl">—</p>
+            </div>
+            <div class="stat-card text-center">
+              <p class="text-[10px] uppercase text-[var(--muted)] tracking-wider">Banco</p>
+              <p id="me-bank" class="font-display font-black text-2xl">—</p>
+            </div>
+          </div>
+
+          <div class="panel p-5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 class="font-bold flex items-center gap-2"><i class="fa-solid fa-gift" style="color:var(--cyan)"></i> Daily</h3>
+                <p id="daily-status" class="text-sm text-[var(--muted)] mt-1">Resgate sua recompensa diária</p>
+              </div>
+              <button id="daily-btn" class="btn-bluu whitespace-nowrap">
+                <i class="fa-solid fa-coins mr-2"></i>Resgatar daily
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RANK UNIVERSAL -->
+      <section id="rank" class="page">
+        <p class="text-xs uppercase tracking-[0.2em] text-[var(--muted)] mb-1">Global</p>
+        <h2 class="font-display text-2xl sm:text-3xl font-black mb-2">Rank universal</h2>
+        <p class="text-sm text-[var(--muted)] mb-5">Top níveis de todos os servidores do bot</p>
+
+        <div id="rank-me" class="panel p-4 mb-4 hidden">
+          <p class="text-xs text-[var(--muted)] uppercase tracking-wider mb-1">Sua posição</p>
+          <p id="rank-me-text" class="font-bold text-lg">—</p>
+        </div>
+
+        <div id="rank-list" class="panel p-2 sm:p-3 space-y-1">
+          <div class="p-8 text-center text-[var(--muted)]">Faça login para ver o rank</div>
+        </div>
+      </section>
+
+      <!-- IA PÁGINA SEPARADA -->
+      <section id="ai-page" class="page">
+        <div class="ai-page-wrap panel !overflow-hidden flex flex-col">
+          <div class="flex items-center gap-3 p-4 border-b border-[var(--border)]">
+            <img src="https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png"
+                 class="w-11 h-11 rounded-xl object-cover border border-[var(--blue)]" alt=""
+                 onerror="this.style.display='none'">
+            <div class="flex-1 min-w-0">
+              <h2 class="font-display font-bold text-base sm:text-lg">IA Bluudud</h2>
+              <p class="text-xs text-[var(--muted)]">Groq · llama · página dedicada</p>
+            </div>
+            <button id="ai-clear" class="btn-ghost text-xs py-2 px-3">Limpar</button>
+          </div>
+          <div id="ai-messages" class="flex-1 overflow-y-auto p-4 space-y-3">
+            <div class="ai-msg system">Mwehehe! Página só da IA. Pergunta aí, streamer.</div>
+          </div>
+          <form id="ai-form" class="p-3 sm:p-4 border-t border-[var(--border)] flex gap-2">
+            <input id="ai-input" class="input-bluu flex-1" placeholder="Mensagem pro Bluudud..." maxlength="1000" autocomplete="off">
+            <button type="submit" class="btn-bluu px-4 shrink-0" aria-label="Enviar"><i class="fa-solid fa-paper-plane"></i></button>
+          </form>
+        </div>
+      </section>
+
+      <!-- SERVIDORES -->
       <section id="dashboard" class="page">
-        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6">
           <div>
             <p class="text-xs uppercase tracking-[0.2em] text-[var(--muted)] mb-1">Painel</p>
-            <h2 class="font-display text-3xl font-black">Servidores</h2>
+            <h2 class="font-display text-2xl sm:text-3xl font-black">Servidores</h2>
           </div>
           <div class="panel px-4 py-3">
             <p class="text-xs text-[var(--muted)]">Disponíveis</p>
             <p id="server-count" class="font-display font-bold" style="color:var(--cyan)">—</p>
           </div>
         </div>
-        <div class="flex flex-col sm:flex-row gap-3 mb-5">
-          <input id="server-search" class="input-bluu flex-1" type="search" placeholder="Buscar servidor...">
-          <select id="server-sort" class="input-bluu sm:w-44">
-            <option value="name-asc">A → Z</option>
-            <option value="name-desc">Z → A</option>
-          </select>
-        </div>
-        <div id="server-list" class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          <div class="server-tile h-36 animate-pulse opacity-50"></div>
-          <div class="server-tile h-36 animate-pulse opacity-50"></div>
+        <input id="server-search" class="input-bluu mb-4" type="search" placeholder="Buscar servidor...">
+        <div id="server-list" class="grid sm:grid-cols-2 gap-3">
+          <div class="server-tile h-32 animate-pulse opacity-40"></div>
         </div>
       </section>
 
+      <!-- PERSONAGEM -->
       <section id="character" class="page">
         <p class="text-xs uppercase tracking-[0.2em] text-[var(--muted)] mb-1">Forsaken</p>
-        <h2 class="font-display text-3xl font-black mb-6">Bluudud</h2>
-        <div class="grid lg:grid-cols-2 gap-6 mb-8">
+        <h2 class="font-display text-2xl sm:text-3xl font-black mb-5">Bluudud</h2>
+        <div class="grid lg:grid-cols-2 gap-5">
           <div class="panel p-6 flex flex-col items-center">
-            <img src="https://forsaken.wiki/Special:FilePath/Skinc00l_bluudud_InvIcon.png" alt="Bluudud"
-                 class="char-img max-h-64 mb-4"
+            <img src="https://forsaken.wiki/Special:FilePath/Skinc00l_bluudud_InvIcon.png" class="char-img max-h-56 mb-3" alt=""
                  onerror="this.src='https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png'">
-            <p class="font-display font-bold" style="color:var(--cyan)">“IM COOLER BECAUSE IM B;LUE”</p>
+            <p class="font-display font-bold text-center" style="color:var(--cyan)">“IM COOLER BECAUSE IM B;LUE”</p>
           </div>
-          <div class="panel p-6 space-y-4 text-sm text-[var(--muted)] leading-relaxed">
-            <p><strong class="text-[var(--text)]">Skin de c00lkidd</strong> em Forsaken. Criado por <strong style="color:var(--cyan)">BaconStripz125</strong>.</p>
-            <p>Corpo azul, cabeça redonda, olhos brancos e três fileiras de dentes. No peito: <em>tem bluudude get in nowww!!!</em></p>
-            <p>Arma: pirulito. Minions de pizza temáticos. Emote e voicelines exclusivas.</p>
-            <div class="quote-bubble text-[var(--text)]">Things are getting a whole lot bluer!</div>
-            <p class="text-xs">Lore: streamer, filho de 118o8, nasceu azul por condição de saúde.</p>
+          <div class="panel p-5 space-y-3 text-sm text-[var(--muted)] leading-relaxed">
+            <p><strong class="text-[var(--text)]">Skin de c00lkidd</strong> em Forsaken.</p>
+            <p>Azul, pirulito, pizza minions, voicelines e emote exclusivos.</p>
+            <div class="quote-bubble text-[var(--text)] text-sm">Things are getting a whole lot bluer!</div>
           </div>
-        </div>
-        <h3 class="font-display font-bold mb-4">Galeria</h3>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <img class="gallery-img" src="https://forsaken.wiki/Special:FilePath/Skinc00l_bluudud_InvIcon.png" alt="Render" onerror="this.style.display='none'">
-          <img class="gallery-img" src="https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png" alt="Graffiti" onerror="this.style.display='none'">
-          <img class="gallery-img object-contain bg-[#0a1528]" src="https://pbs.twimg.com/media/G645nssXQAAj2SD.jpg" alt="Anim" onerror="this.style.display='none'">
-          <img class="gallery-img" src="https://preview.redd.it/xtntvp0jbioe1.png?width=640&format=png&auto=webp" alt="Fanart" onerror="this.style.display='none'">
         </div>
       </section>
 
+      <!-- COMANDOS -->
       <section id="commands" class="page">
-        <p class="text-xs uppercase tracking-[0.2em] text-[var(--muted)] mb-1">Referência</p>
-        <h2 class="font-display text-3xl font-black mb-6">Comandos</h2>
-        <div class="grid md:grid-cols-2 gap-4">
-          <div class="panel p-5">
-            <h3 class="font-bold mb-2" style="color:var(--cyan)"><i class="fa-solid fa-robot mr-2"></i>IA</h3>
-            <p class="text-sm text-[var(--muted)]">/ai · /traduzir · /resumir · /corrigir · /ai-imagine</p>
+        <p class="text-xs uppercase tracking-[0.2em] text-[var(--muted)] mb-1">Discord</p>
+        <h2 class="font-display text-2xl sm:text-3xl font-black mb-5">Comandos</h2>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div class="panel p-4"><h3 class="font-bold mb-1" style="color:var(--cyan)">/config</h3><p class="text-sm text-[var(--muted)]">boasvindas · tag-cargo · ver</p></div>
+          <div class="panel p-4"><h3 class="font-bold mb-1" style="color:var(--cyan)">/mod</h3><p class="text-sm text-[var(--muted)]">limpar · banir · mutar · lock</p></div>
+          <div class="panel p-4"><h3 class="font-bold mb-1" style="color:var(--cyan)">/eco</h3><p class="text-sm text-[var(--muted)]">daily · slots · ranking</p></div>
+          <div class="panel p-4"><h3 class="font-bold mb-1" style="color:var(--cyan)">/loja</h3><p class="text-sm text-[var(--muted)]">comprar · equipar tags</p></div>
+          <div class="panel p-4"><h3 class="font-bold mb-1" style="color:var(--cyan)">/nivel</h3><p class="text-sm text-[var(--muted)]">rank · top (imagem)</p></div>
+          <div class="panel p-4"><h3 class="font-bold mb-1" style="color:var(--cyan)">/ai</h3><p class="text-sm text-[var(--muted)]">falar · traduzir · resumir</p></div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section id="settings" class="page">
+        <p class="text-xs uppercase tracking-[0.2em] text-[var(--muted)] mb-1">Preferências</p>
+        <h2 class="font-display text-2xl sm:text-3xl font-black mb-5">Configurações</h2>
+        <div class="panel p-5 space-y-5">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="font-bold">Fundo animado</p>
+              <p class="text-xs text-[var(--muted)]">Orbs + grid em movimento</p>
+            </div>
+            <button class="toggle on" id="tog-anim" aria-label="Animação"></button>
           </div>
-          <div class="panel p-5">
-            <h3 class="font-bold mb-2" style="color:var(--cyan)"><i class="fa-solid fa-shield mr-2"></i>Moderação</h3>
-            <p class="text-sm text-[var(--muted)]">/limpar · /expulsar · /banir · /mutar · /lock · /warn</p>
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="font-bold">Scanlines</p>
+              <p class="text-xs text-[var(--muted)]">Efeito CRT sutil</p>
+            </div>
+            <button class="toggle on" id="tog-scan" aria-label="Scanlines"></button>
           </div>
-          <div class="panel p-5">
-            <h3 class="font-bold mb-2" style="color:var(--cyan)"><i class="fa-solid fa-coins mr-2"></i>Economia</h3>
-            <p class="text-sm text-[var(--muted)]">/saldo · /daily · /trabalhar · /apostar · /roubar · /slots · /ranking</p>
-          </div>
-          <div class="panel p-5">
-            <h3 class="font-bold mb-2" style="color:var(--cyan)"><i class="fa-solid fa-face-laugh mr-2"></i>Diversão</h3>
-            <p class="text-sm text-[var(--muted)]">/meme · /8ball · /ship · /zoar · /jokenpo · /roleta · /rizz</p>
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="font-bold">Reduzir movimento</p>
+              <p class="text-xs text-[var(--muted)]">Desliga animações pesadas</p>
+            </div>
+            <button class="toggle" id="tog-reduce" aria-label="Reduzir"></button>
           </div>
         </div>
       </section>
 
       <section id="privacy" class="page">
-        <div class="panel p-8 max-w-3xl">
-          <h2 class="font-display text-2xl font-black mb-2">Privacidade</h2>
-          <p class="text-xs text-[var(--muted)] mb-6">Atualizado em 3 de agosto de 2026</p>
-          <div class="space-y-5 text-sm text-[var(--muted)] leading-relaxed">
-            <p><strong class="text-[var(--text)]">1.</strong> Coletamos ID, username, avatar e servidores do Discord no login OAuth.</p>
-            <p><strong class="text-[var(--text)]">2.</strong> Uso exclusivo para autenticação e configuração do bot.</p>
-            <p><strong class="text-[var(--text)]">3.</strong> Não vendemos dados. Sessão via cookie seguro.</p>
+        <div class="panel p-6 sm:p-8 max-w-3xl">
+          <h2 class="font-display text-xl font-black mb-4">Privacidade</h2>
+          <div class="space-y-3 text-sm text-[var(--muted)] leading-relaxed">
+            <p>Coletamos ID, username, avatar e servidores via OAuth do Discord.</p>
+            <p>Uso para autenticação, daily, rank e configuração do bot.</p>
+            <p>Não vendemos dados. Sessão em cookie seguro.</p>
           </div>
         </div>
       </section>
 
       <section id="terms" class="page">
-        <div class="panel p-8 max-w-3xl">
-          <h2 class="font-display text-2xl font-black mb-2">Termos de Uso</h2>
-          <p class="text-xs text-[var(--muted)] mb-6">Atualizado em 3 de agosto de 2026</p>
-          <div class="space-y-5 text-sm text-[var(--muted)] leading-relaxed">
-            <p><strong class="text-[var(--text)]">1.</strong> Ao usar o Bluudud Bot você aceita estes termos.</p>
-            <p><strong class="text-[var(--text)]">2.</strong> Proibido abuso, spam e uso ilegal.</p>
-            <p><strong class="text-[var(--text)]">3.</strong> O serviço pode ficar offline para manutenção.</p>
+        <div class="panel p-6 sm:p-8 max-w-3xl">
+          <h2 class="font-display text-xl font-black mb-4">Termos</h2>
+          <div class="space-y-3 text-sm text-[var(--muted)] leading-relaxed">
+            <p>Ao usar o Bluudud Bot você aceita estes termos.</p>
+            <p>Proibido abuso, spam e uso ilegal da IA ou economia.</p>
+            <p>O serviço pode ficar offline para manutenção.</p>
           </div>
         </div>
       </section>
     </div>
   </div>
 
-  <div id="server-modal" class="hidden fixed inset-0 z-50 modal-bg p-4 items-center justify-center">
-    <div class="panel w-full max-w-md p-6">
-      <div class="flex justify-between items-start mb-5">
+  <!-- bottom nav mobile -->
+  <nav class="bottom-nav">
+    <button class="bnav-btn active" data-page="home"><i class="fa-solid fa-house"></i>Início</button>
+    <button class="bnav-btn" data-page="me"><i class="fa-solid fa-user"></i>Perfil</button>
+    <button class="bnav-btn" data-page="ai-page"><i class="fa-solid fa-robot"></i>IA</button>
+    <button class="bnav-btn" data-page="rank"><i class="fa-solid fa-trophy"></i>Rank</button>
+    <button class="bnav-btn" data-page="dashboard"><i class="fa-solid fa-server"></i>Servers</button>
+  </nav>
+
+  <!-- modal servidor -->
+  <div id="server-modal" class="hidden fixed inset-0 z-[100] p-4 items-center justify-center" style="background:rgba(4,10,24,0.88);backdrop-filter:blur(6px)">
+    <div class="panel w-full max-w-md p-5">
+      <div class="flex justify-between items-start mb-4">
         <div>
-          <h3 id="server-modal-name" class="font-display font-bold text-lg">Servidor</h3>
+          <h3 id="server-modal-name" class="font-display font-bold">Servidor</h3>
           <p class="text-xs text-[var(--muted)]">Ações</p>
         </div>
         <button id="close-server-modal" class="btn-ghost px-2 py-1"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div class="space-y-2">
-        <button id="action-welcome" class="w-full panel p-4 text-left flex items-center gap-3 hover:border-[var(--blue)] transition">
-          <i class="fa-solid fa-hand-wave text-lg w-8" style="color:var(--cyan)"></i>
-          <div>
-            <p class="font-bold text-sm">Boas-vindas</p>
-            <p class="text-xs text-[var(--muted)]">Canal, mensagem, cargo</p>
-          </div>
-        </button>
-        <button id="action-ai" class="w-full panel p-4 text-left flex items-center gap-3 hover:border-[var(--blue)] transition">
-          <i class="fa-solid fa-robot text-lg w-8" style="color:var(--cyan)"></i>
-          <div>
-            <p class="font-bold text-sm">Conversar com a IA</p>
-            <p class="text-xs text-[var(--muted)]">Groq · Bluudud</p>
-          </div>
-        </button>
-      </div>
+      <button id="action-welcome" class="w-full panel p-4 text-left flex items-center gap-3 mb-2 hover:border-[var(--blue)] transition">
+        <i class="fa-solid fa-hand-wave text-lg w-8" style="color:var(--cyan)"></i>
+        <div><p class="font-bold text-sm">Boas-vindas</p><p class="text-xs text-[var(--muted)]">Canal, mensagem, cargo</p></div>
+      </button>
+      <button id="action-ai-goto" class="w-full panel p-4 text-left flex items-center gap-3 hover:border-[var(--blue)] transition">
+        <i class="fa-solid fa-robot text-lg w-8" style="color:var(--cyan)"></i>
+        <div><p class="font-bold text-sm">Abrir IA</p><p class="text-xs text-[var(--muted)]">Página dedicada</p></div>
+      </button>
     </div>
   </div>
 
-  <div id="welcome-modal" class="hidden fixed inset-0 z-50 modal-bg p-4 items-center justify-center">
-    <div class="panel w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
-      <div class="flex justify-between mb-5">
+  <div id="welcome-modal" class="hidden fixed inset-0 z-[100] p-4 items-center justify-center" style="background:rgba(4,10,24,0.88);backdrop-filter:blur(6px)">
+    <div class="panel w-full max-w-lg p-5 max-h-[90dvh] overflow-y-auto">
+      <div class="flex justify-between mb-4">
         <h3 class="font-display font-bold">Boas-vindas</h3>
         <button id="close-welcome" class="btn-ghost px-2 py-1"><i class="fa-solid fa-xmark"></i></button>
       </div>
@@ -433,14 +625,14 @@
           <input id="welcome-channel" class="input-bluu mt-1" placeholder="ID do canal">
         </div>
         <div>
-          <label class="text-xs text-[var(--muted)]">Mensagem ({membro} {servidor} {total})</label>
-          <textarea id="welcome-message" class="input-bluu mt-1 min-h-20" placeholder="Seja bem-vindo {membro}!"></textarea>
+          <label class="text-xs text-[var(--muted)]">Mensagem</label>
+          <textarea id="welcome-message" class="input-bluu mt-1 min-h-[80px]" placeholder="Seja bem-vindo {membro}!"></textarea>
         </div>
         <div>
-          <label class="text-xs text-[var(--muted)]">ID do cargo (opcional)</label>
-          <input id="welcome-role" class="input-bluu mt-1" placeholder="ID do cargo">
+          <label class="text-xs text-[var(--muted)]">ID do cargo</label>
+          <input id="welcome-role" class="input-bluu mt-1" placeholder="Opcional">
         </div>
-        <div class="flex gap-2 pt-2">
+        <div class="flex gap-2 pt-1">
           <button id="welcome-test" class="btn-ghost flex-1">Testar</button>
           <button id="welcome-save" class="btn-bluu flex-1">Salvar</button>
         </div>
@@ -448,48 +640,15 @@
     </div>
   </div>
 
-  <div id="ai-modal" class="hidden fixed inset-0 z-50 modal-bg p-4 items-center justify-center">
-    <div class="panel w-full max-w-xl p-6 flex flex-col max-h-[90vh]">
-      <div class="flex justify-between items-center mb-4">
-        <div class="flex items-center gap-3">
-          <img src="https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png"
-               class="w-10 h-10 rounded-lg object-cover border border-[var(--blue)]" alt=""
-               onerror="this.style.display='none'">
-          <div>
-            <h3 class="font-display font-bold">IA Bluudud</h3>
-            <p class="text-xs text-[var(--muted)]">Powered by Groq</p>
-          </div>
-        </div>
-        <button id="close-ai" class="btn-ghost px-2 py-1"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div id="ai-messages" class="flex-1 overflow-y-auto space-y-3 mb-4 max-h-80 pr-1">
-        <div class="ai-msg system">Mwehehe! Pergunta aí, streamer.</div>
-      </div>
-      <form id="ai-form" class="flex gap-2">
-        <input id="ai-input" class="input-bluu flex-1" placeholder="Mensagem..." maxlength="1000" autocomplete="off">
-        <button type="submit" class="btn-bluu px-4"><i class="fa-solid fa-paper-plane"></i></button>
-      </form>
-    </div>
-  </div>
-
   <script>
     const $ = s => document.querySelector(s);
     const $$ = s => document.querySelectorAll(s);
+    let isAuth = false, currentGuildId = null, dailyTimer = null;
+
     function showToast(msg) {
       $('#toast-text').textContent = msg;
       $('#toast').classList.add('show');
-      setTimeout(() => $('#toast').classList.remove('show'), 2200);
-    }
-    let isAuth = false, currentGuildId = null;
-
-    function navigate(page) {
-      if (page === 'dashboard' && !isAuth) { showToast('Faça login primeiro.'); page = 'home'; }
-      $$('.page').forEach(p => p.classList.remove('active'));
-      const el = document.getElementById(page);
-      if (el) el.classList.add('active');
-      $$('.side-link').forEach(l => l.classList.toggle('active', l.dataset.page === page));
-      $('#sidebar')?.classList.remove('mobile-open');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => $('#toast').classList.remove('show'), 2400);
     }
     function escapeHTML(s) {
       return String(s || '').replace(/[&<>'"]/g, t => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[t]));
@@ -499,8 +658,41 @@
         const ext = String(u.avatar).startsWith('a_') ? 'gif' : 'png';
         return `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.${ext}?size=128`;
       }
-      return `https://cdn.discordapp.com/embed/avatars/${u.id ? Number(BigInt(u.id) >> 22n) % 5 : 0}.png`;
+      return `https://cdn.discordapp.com/embed/avatars/0.png`;
     }
+    function formatTime(s) {
+      if (s >= 3600) return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+      if (s >= 60) return `${Math.floor(s/60)}m ${s%60}s`;
+      return `${s}s`;
+    }
+
+    function navigate(page) {
+      const needAuth = ['me','rank','dashboard'];
+      if (needAuth.includes(page) && !isAuth) {
+        showToast('Faça login primeiro.');
+        page = 'home';
+      }
+      $$('.page').forEach(p => p.classList.remove('active'));
+      const el = document.getElementById(page);
+      if (el) el.classList.add('active');
+      $$('.side-link').forEach(l => l.classList.toggle('active', l.dataset.page === page));
+      $$('.bnav-btn').forEach(l => l.classList.toggle('active', l.dataset.page === page));
+      closeMobileNav();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (page === 'me' && isAuth) loadProfile();
+      if (page === 'rank' && isAuth) loadRank();
+      if (page === 'dashboard' && isAuth) loadServers();
+    }
+
+    function openMobileNav() {
+      $('#sidebar').classList.add('mobile-open');
+      $('#sidebar-backdrop').classList.add('show');
+    }
+    function closeMobileNav() {
+      $('#sidebar')?.classList.remove('mobile-open');
+      $('#sidebar-backdrop')?.classList.remove('show');
+    }
+
     function renderUser(u) {
       const name = u.global_name || u.username || 'User';
       const av = avatarUrl(u);
@@ -510,7 +702,9 @@
       $('#user-area').classList.remove('hidden');
       const um = $('#user-area-mobile');
       if (um) { um.classList.remove('hidden'); $('#user-avatar-m').src = av; }
+      $('#login-btn')?.classList.add('hidden');
     }
+
     async function loadDashboard() {
       try {
         const res = await fetch('/api/me', { credentials: 'include' });
@@ -519,10 +713,119 @@
         const user = await res.json();
         isAuth = true;
         renderUser(user);
-        navigate('dashboard');
-        await loadServers();
       } catch { isAuth = false; }
     }
+
+    async function loadProfile() {
+      try {
+        const res = await fetch('/api/profile', { credentials: 'include' });
+        if (!res.ok) throw new Error();
+        const p = await res.json();
+        $('#me-guest').classList.add('hidden');
+        $('#me-content').classList.remove('hidden');
+        $('#me-avatar').src = avatarUrl(p);
+        $('#me-name').textContent = p.global_name || p.username;
+        $('#me-username').textContent = '@' + (p.username || '');
+        $('#me-tagline').textContent = p.tag || '';
+        $('#me-level').textContent = p.level;
+        $('#me-coins').textContent = p.carteira;
+        $('#me-bank').textContent = p.banco;
+        $('#me-rep').textContent = p.rep;
+        const pct = Math.min(100, Math.floor((p.xp / p.xpNeeded) * 100));
+        $('#me-xp-fill').style.width = pct + '%';
+        $('#me-xp-label').textContent = `${p.xp} / ${p.xpNeeded} XP (${pct}%)`;
+        setupDaily(p.dailyCooldown);
+      } catch {
+        $('#me-guest').classList.remove('hidden');
+        $('#me-content').classList.add('hidden');
+      }
+    }
+
+    function setupDaily(cd) {
+      clearInterval(dailyTimer);
+      const btn = $('#daily-btn');
+      const st = $('#daily-status');
+      if (cd > 0) {
+        btn.disabled = true;
+        let left = cd;
+        st.textContent = `Disponível em ${formatTime(left)}`;
+        btn.innerHTML = `<i class="fa-solid fa-clock mr-2"></i>${formatTime(left)}`;
+        dailyTimer = setInterval(() => {
+          left--;
+          if (left <= 0) {
+            clearInterval(dailyTimer);
+            btn.disabled = false;
+            st.textContent = 'Resgate sua recompensa diária';
+            btn.innerHTML = '<i class="fa-solid fa-coins mr-2"></i>Resgatar daily';
+            return;
+          }
+          st.textContent = `Disponível em ${formatTime(left)}`;
+          btn.innerHTML = `<i class="fa-solid fa-clock mr-2"></i>${formatTime(left)}`;
+        }, 1000);
+      } else {
+        btn.disabled = false;
+        st.textContent = 'Resgate sua recompensa diária (200–350 🪙)';
+        btn.innerHTML = '<i class="fa-solid fa-coins mr-2"></i>Resgatar daily';
+      }
+    }
+
+    async function claimDaily() {
+      const btn = $('#daily-btn');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/daily', { method: 'POST', credentials: 'include' });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 429) {
+          showToast('Aguarde ' + formatTime(data.cooldown || 0));
+          setupDaily(data.cooldown || 0);
+          return;
+        }
+        if (!res.ok) { showToast(data.error || 'Erro'); btn.disabled = false; return; }
+        showToast(`+${data.ganho} 🪙 resgatados!`);
+        loadProfile();
+      } catch {
+        showToast('Falha de conexão');
+        btn.disabled = false;
+      }
+    }
+
+    async function loadRank() {
+      const box = $('#rank-list');
+      box.innerHTML = '<div class="p-6 text-center text-[var(--muted)]">Carregando...</div>';
+      try {
+        const res = await fetch('/api/rank', { credentials: 'include' });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        if (data.me) {
+          $('#rank-me').classList.remove('hidden');
+          $('#rank-me-text').textContent = data.me.rank
+            ? `#${data.me.rank} · Nível ${data.me.level} · ${data.me.xp} XP${data.me.tag ? ' · ' + data.me.tag : ''}`
+            : `Nível ${data.me.level} (ainda sem ranking)`;
+        }
+        if (!data.top?.length) {
+          box.innerHTML = '<div class="p-6 text-center text-[var(--muted)]">Ninguém no rank ainda. Fale no Discord!</div>';
+          return;
+        }
+        const medals = ['🥇','🥈','🥉'];
+        box.innerHTML = data.top.map((e, i) => {
+          const av = e.avatar
+            ? `<img src="${escapeHTML(e.avatar)}" class="w-9 h-9 rounded-full object-cover border border-[var(--border)]">`
+            : `<div class="w-9 h-9 rounded-full bg-[var(--panel2)] flex items-center justify-center text-xs font-bold">${(e.username||'?')[0]}</div>`;
+          const isMe = e.id === data.me?.id;
+          return `<div class="rank-row ${isMe ? 'me' : ''}">
+            <span class="w-8 text-center font-bold">${medals[i] || '#'+(i+1)}</span>
+            ${av}
+            <div class="min-w-0 flex-1">
+              <p class="font-bold text-sm truncate">${e.tag ? '['+escapeHTML(e.tag)+'] ' : ''}${escapeHTML(e.username)}</p>
+              <p class="text-xs text-[var(--muted)]">Nv ${e.level} · ${e.xp} XP</p>
+            </div>
+          </div>`;
+        }).join('');
+      } catch {
+        box.innerHTML = '<div class="p-6 text-center text-[var(--muted)]">Erro ao carregar rank</div>';
+      }
+    }
+
     async function loadServers() {
       const box = $('#server-list'), count = $('#server-count');
       try {
@@ -531,19 +834,19 @@
         const servers = await res.json();
         box.innerHTML = '';
         if (!servers.length) {
-          box.innerHTML = `<div class="panel p-10 text-center col-span-full"><i class="fa-solid fa-ghost text-3xl mb-3" style="color:var(--blue)"></i><p class="font-bold">Nenhum servidor</p><p class="text-sm text-[var(--muted)]">Precisa de permissão de gerenciar.</p></div>`;
+          box.innerHTML = `<div class="panel p-8 text-center col-span-full"><p class="font-bold">Nenhum servidor</p><p class="text-sm text-[var(--muted)]">Precisa gerenciar o servidor</p></div>`;
           count.textContent = '0'; return;
         }
         count.textContent = String(servers.length);
         servers.forEach(s => {
           const name = escapeHTML(s.name || 'Servidor');
           const icon = s.icon
-            ? `<img src="https://cdn.discordapp.com/icons/${s.id}/${s.icon}.${s.icon.startsWith('a_')?'gif':'png'}?size=64" class="w-12 h-12 rounded-xl object-cover border border-[var(--border)]">`
-            : `<div class="w-12 h-12 rounded-xl border border-[var(--border)] flex items-center justify-center font-display font-bold" style="background:rgba(77,184,255,.2);color:var(--cyan)">${name.slice(0,2).toUpperCase()}</div>`;
+            ? `<img src="https://cdn.discordapp.com/icons/${s.id}/${s.icon}.${String(s.icon).startsWith('a_')?'gif':'png'}?size=64" class="w-11 h-11 rounded-xl object-cover border border-[var(--border)]">`
+            : `<div class="w-11 h-11 rounded-xl border border-[var(--border)] flex items-center justify-center font-display font-bold text-sm" style="background:rgba(77,184,255,.2);color:var(--cyan)">${name.slice(0,2).toUpperCase()}</div>`;
           const tile = document.createElement('div');
-          tile.className = 'server-tile flex flex-col justify-between min-h-[140px]';
+          tile.className = 'server-tile flex flex-col justify-between min-h-[120px]';
           tile.dataset.serverName = (s.name || '').toLowerCase();
-          tile.innerHTML = `<div class="flex items-center gap-3">${icon}<div class="min-w-0"><p class="text-[10px] uppercase tracking-widest text-[var(--muted)]">Discord</p><p class="font-bold truncate">${name}</p></div></div><button class="cfg btn-bluu w-full mt-4 py-2.5 text-sm">Configurar</button>`;
+          tile.innerHTML = `<div class="flex items-center gap-3">${icon}<div class="min-w-0"><p class="text-[10px] uppercase tracking-widest text-[var(--muted)]">Discord</p><p class="font-bold truncate text-sm">${name}</p></div></div><button class="cfg btn-bluu w-full mt-3 py-2 text-sm">Configurar</button>`;
           tile.querySelector('.cfg').onclick = () => {
             currentGuildId = s.id;
             $('#server-modal-name').textContent = s.name || 'Servidor';
@@ -553,10 +856,10 @@
           box.appendChild(tile);
         });
       } catch {
-        box.innerHTML = `<div class="panel p-10 text-center col-span-full"><p class="font-bold">Erro ao carregar</p></div>`;
-        count.textContent = 'Erro';
+        box.innerHTML = `<div class="panel p-8 text-center col-span-full"><p class="font-bold">Erro ao carregar</p></div>`;
       }
     }
+
     function appendMsg(t, role) {
       const c = $('#ai-messages');
       const d = document.createElement('div');
@@ -567,10 +870,11 @@
     }
     async function sendAi(text) {
       if (!text.trim()) return;
+      if (!isAuth) { showToast('Faça login para usar a IA'); return; }
       appendMsg(text, 'user');
       $('#ai-input').value = '';
       const tip = document.createElement('div');
-      tip.className = 'ai-msg bot'; tip.id = 'typing'; tip.textContent = '...';
+      tip.className = 'ai-msg bot'; tip.id = 'typing'; tip.textContent = 'mwehehe...';
       $('#ai-messages').appendChild(tip);
       try {
         const res = await fetch('/api/ai', {
@@ -584,30 +888,46 @@
       } catch { tip.remove(); appendMsg('Falha de conexão.', 'bot'); }
     }
 
+    // settings toggles
+    function loadPrefs() {
+      const anim = localStorage.getItem('bluu_anim') !== '0';
+      const scan = localStorage.getItem('bluu_scan') !== '0';
+      const reduce = localStorage.getItem('bluu_reduce') === '1';
+      $('#tog-anim').classList.toggle('on', anim);
+      $('#tog-scan').classList.toggle('on', scan);
+      $('#tog-reduce').classList.toggle('on', reduce);
+      applyPrefs(anim, scan, reduce);
+    }
+    function applyPrefs(anim, scan, reduce) {
+      document.querySelectorAll('.orb').forEach(o => o.style.display = (anim && !reduce) ? '' : 'none');
+      $('.bg-grid').style.animation = (anim && !reduce) ? '' : 'none';
+      $('.scanlines').style.display = scan ? '' : 'none';
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
       $$('.side-link').forEach(l => l.addEventListener('click', () => navigate(l.dataset.page)));
+      $$('.bnav-btn').forEach(l => l.addEventListener('click', () => navigate(l.dataset.page)));
+      $$('[data-goto]').forEach(b => b.addEventListener('click', () => navigate(b.dataset.goto)));
+
       $('#login-btn')?.addEventListener('click', () => location.href = '/login');
       $('#logout-btn')?.addEventListener('click', () => location.href = '/logout');
-      $('#menu-btn')?.addEventListener('click', () => $('#sidebar').classList.add('mobile-open'));
-      $('#close-menu')?.addEventListener('click', () => $('#sidebar').classList.remove('mobile-open'));
+      $('#menu-btn')?.addEventListener('click', openMobileNav);
+      $('#close-menu')?.addEventListener('click', closeMobileNav);
+      $('#sidebar-backdrop')?.addEventListener('click', closeMobileNav);
+
+      $('#daily-btn')?.addEventListener('click', claimDaily);
+      $('#ai-form')?.addEventListener('submit', e => { e.preventDefault(); sendAi($('#ai-input').value); });
+      $('#ai-clear')?.addEventListener('click', () => {
+        $('#ai-messages').innerHTML = '<div class="ai-msg system">Chat limpo. Mwehehe!</div>';
+      });
 
       $('#close-server-modal')?.addEventListener('click', () => {
         $('#server-modal').classList.add('hidden'); $('#server-modal').classList.remove('flex');
       });
-      $('#server-modal')?.addEventListener('click', e => {
-        if (e.target === $('#server-modal')) {
-          $('#server-modal').classList.add('hidden'); $('#server-modal').classList.remove('flex');
-        }
-      });
-      $('#action-ai')?.addEventListener('click', () => {
+      $('#action-ai-goto')?.addEventListener('click', () => {
         $('#server-modal').classList.add('hidden'); $('#server-modal').classList.remove('flex');
-        $('#ai-modal').classList.remove('hidden'); $('#ai-modal').classList.add('flex');
+        navigate('ai-page');
       });
-      $('#close-ai')?.addEventListener('click', () => {
-        $('#ai-modal').classList.add('hidden'); $('#ai-modal').classList.remove('flex');
-      });
-      $('#ai-form')?.addEventListener('submit', e => { e.preventDefault(); sendAi($('#ai-input').value); });
-
       $('#action-welcome')?.addEventListener('click', () => {
         $('#server-modal').classList.add('hidden'); $('#server-modal').classList.remove('flex');
         $('#welcome-modal').classList.remove('hidden'); $('#welcome-modal').classList.add('flex');
@@ -650,6 +970,25 @@
           t.style.display = (t.dataset.serverName || '').includes(q) ? '' : 'none';
         });
       });
+
+      // toggles
+      loadPrefs();
+      $('#tog-anim')?.addEventListener('click', function() {
+        this.classList.toggle('on');
+        localStorage.setItem('bluu_anim', this.classList.contains('on') ? '1' : '0');
+        loadPrefs();
+      });
+      $('#tog-scan')?.addEventListener('click', function() {
+        this.classList.toggle('on');
+        localStorage.setItem('bluu_scan', this.classList.contains('on') ? '1' : '0');
+        loadPrefs();
+      });
+      $('#tog-reduce')?.addEventListener('click', function() {
+        this.classList.toggle('on');
+        localStorage.setItem('bluu_reduce', this.classList.contains('on') ? '1' : '0');
+        loadPrefs();
+      });
+
       loadDashboard();
     });
   </script>

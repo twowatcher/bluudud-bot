@@ -366,6 +366,100 @@ function formatTime(seconds) {
     return `${seconds}s`;
 }
 
+// ==================== API SITE: PERFIL / DAILY / RANK ====================
+app.get('/api/profile', (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: 'Não autenticado' });
+    const id = req.session.user.id;
+    const c = iniciarConta(id);
+    const lv = getLevelData(id);
+    const inv = getInv(id);
+    const rep = reps.get(id) || 0;
+    const tag = getTagDisplay(id);
+    const dailyCd = (() => {
+        const key = `${id}:daily`;
+        if (!cooldowns.has(key)) return 0;
+        const left = Math.ceil((cooldowns.get(key) - Date.now()) / 1000);
+        return left > 0 ? left : 0;
+    })();
+    res.json({
+        id,
+        username: req.session.user.username,
+        global_name: req.session.user.global_name,
+        avatar: req.session.user.avatar,
+        carteira: c.carteira,
+        banco: c.banco,
+        total: c.carteira + c.banco,
+        level: lv.level,
+        xp: lv.xp,
+        xpNeeded: xpForLevel(lv.level),
+        rep,
+        tag,
+        equippedTag: inv.equippedTag,
+        tags: inv.tags || [],
+        dailyCooldown: dailyCd,
+        marriedTo: marriages.get(id) || null
+    });
+});
+
+app.post('/api/daily', (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: 'Não autenticado' });
+    const id = req.session.user.id;
+    const cd = checkCd(id, 'daily', 24 * 60 * 60 * 1000);
+    if (cd) {
+        return res.status(429).json({ error: 'Aguarde', cooldown: cd });
+    }
+    const c = iniciarConta(id);
+    const ganho = 200 + Math.floor(Math.random() * 150);
+    c.carteira += ganho;
+    persistBanco();
+    res.json({ success: true, ganho, saldo: c.carteira });
+});
+
+app.get('/api/rank', (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: 'Não autenticado' });
+    const sorted = [...levels.entries()]
+        .map(([id, v]) => ({
+            id,
+            level: v.level || 1,
+            xp: v.xp || 0,
+            tag: getTagDisplay(id)
+        }))
+        .sort((a, b) => b.level - a.level || b.xp - a.xp)
+        .slice(0, 25);
+
+    // enriquecer com username se estiver em cache de algum guild
+    const enriched = sorted.map((e, i) => {
+        let username = e.id;
+        let avatar = null;
+        for (const g of client.guilds.cache.values()) {
+            const m = g.members.cache.get(e.id);
+            if (m) {
+                username = m.user.username;
+                avatar = m.user.displayAvatarURL({ size: 64 });
+                break;
+            }
+        }
+        return { rank: i + 1, ...e, username, avatar };
+    });
+
+    const meId = req.session.user.id;
+    const myData = getLevelData(meId);
+    const myPos = [...levels.entries()]
+        .map(([id, v]) => ({ id, level: v.level || 1, xp: v.xp || 0 }))
+        .sort((a, b) => b.level - a.level || b.xp - a.xp)
+        .findIndex(x => x.id === meId) + 1;
+
+    res.json({
+        top: enriched,
+        me: {
+            id: meId,
+            rank: myPos || null,
+            level: myData.level,
+            xp: myData.xp,
+            tag: getTagDisplay(meId)
+        }
+    });
+});
 // ==================== COMMANDS (GRUPOS) ====================
 const commandsData = [
     {
