@@ -11,6 +11,7 @@ const express = require('express');
 const session = require('express-session');
 const axios = require('axios');
 const path = require('path');
+const fs = require('fs');
 
 // ==================== CLIENT ====================
 const client = new Client({
@@ -22,15 +23,56 @@ const client = new Client({
     ]
 });
 
-// ==================== DATA (memória) ====================
-const banco = new Map();
-const configBoasVindas = new Map();
+// ==================== PERSISTÊNCIA SIMPLES ====================
+const DATA_DIR = path.join(__dirname, 'data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+function loadJSON(file, fallback = {}) {
+    try {
+        const p = path.join(DATA_DIR, file);
+        if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
+    } catch (e) {
+        console.error(`Erro ao carregar ${file}:`, e.message);
+    }
+    return fallback;
+}
+
+function saveJSON(file, data) {
+    try {
+        fs.writeFileSync(path.join(DATA_DIR, file), JSON.stringify(data, null, 2));
+    } catch (e) {
+        console.error(`Erro ao salvar ${file}:`, e.message);
+    }
+}
+
+const bancoData = loadJSON('banco.json', {});
+const configBoasVindasData = loadJSON('config.json', {});
+const warnsData = loadJSON('warns.json', {});
+
+const banco = new Map(Object.entries(bancoData));
+const configBoasVindas = new Map(Object.entries(configBoasVindasData));
+const warns = new Map(Object.entries(warnsData));
 const cooldowns = new Map();
 const afkMap = new Map();
-const warns = new Map();
+
+function persistBanco() {
+    const obj = Object.fromEntries(banco);
+    saveJSON('banco.json', obj);
+}
+function persistConfig() {
+    const obj = Object.fromEntries(configBoasVindas);
+    saveJSON('config.json', obj);
+}
+function persistWarns() {
+    const obj = Object.fromEntries(warns);
+    saveJSON('warns.json', obj);
+}
 
 const iniciarConta = (id) => {
-    if (!banco.has(id)) banco.set(id, { carteira: 100, banco: 0, daily: 0, trabalho: 0 });
+    if (!banco.has(id)) {
+        banco.set(id, { carteira: 100, banco: 0 });
+        persistBanco();
+    }
     return banco.get(id);
 };
 
@@ -40,7 +82,6 @@ const BLUU = {
     dance: 'https://forsaken.wiki/Special:FilePath/Emotec00lbluudud_CurrentDance.gif',
     face: 'https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png',
     render: 'https://forsaken.wiki/Special:FilePath/Skinc00l_bluudud_InvIcon.png',
-    // fallbacks estáticos se GIF da wiki falhar
     thumb: 'https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png'
 };
 
@@ -60,7 +101,7 @@ function emb(title, desc, opts = {}) {
     return e;
 }
 
-// ==================== GROQ (fetch nativo — sem groq-sdk) ====================
+// ==================== GROQ (só usado no site) ====================
 async function askGroq(prompt, systemExtra = '') {
     const key = process.env.GROQ_API_KEY;
     if (!key) {
@@ -69,7 +110,7 @@ async function askGroq(prompt, systemExtra = '') {
     const system = `Você é o Bluudud, o personagem azul de Forsaken (Roblox). 
 Fale em português brasileiro, de forma divertida, meio streamer, meio troll inocente.
 Use frases como "mwehehe".
-Seja útil mas mantenha a personalidade, não a problema em xingar (de forma educativa), aos finais das frases diga "algo mais bro?. Respostas curtas a médias.
+Seja útil mas mantenha a personalidade. Respostas curtas a médias.
 ${systemExtra}`.trim();
 
     try {
@@ -113,7 +154,21 @@ function checkCd(userId, cmd, ms) {
     return 0;
 }
 
-// ==================== SLASH COMMANDS ====================
+function formatTime(seconds) {
+    if (seconds >= 3600) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        return `${h}h ${m}m`;
+    }
+    if (seconds >= 60) {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}m ${s}s`;
+    }
+    return `${seconds}s`;
+}
+
+// ==================== SLASH COMMANDS (sem IA) ====================
 const commandsData = [
     // Config
     { name: 'config-boasvindas', description: 'Define o canal de boas-vindas', options: [{ name: 'canal', description: 'Canal de texto', type: ApplicationCommandOptionType.Channel, channelTypes: [ChannelType.GuildText], required: true }] },
@@ -183,13 +238,8 @@ const commandsData = [
     { name: 'adivinhe', description: 'Adivinhe o número 1-10', options: [{ name: 'numero', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1, max_value: 10 }] },
     { name: 'bluudanc', description: 'Bluudud dançando (GIF)' },
     { name: 'bluudud', description: 'Info / GIF do Bluudud' },
-    // IA
-    { name: 'ai', description: 'Conversa com a IA Bluudud', options: [{ name: 'mensagem', type: ApplicationCommandOptionType.String, required: true }] },
-    { name: 'traduzir', description: 'Traduz texto', options: [{ name: 'texto', type: ApplicationCommandOptionType.String, required: true }, { name: 'idioma', type: ApplicationCommandOptionType.String, required: false }] },
-    { name: 'resumir', description: 'Resume texto', options: [{ name: 'texto', type: ApplicationCommandOptionType.String, required: true }] },
-    { name: 'corrigir', description: 'Corrige gramática', options: [{ name: 'texto', type: ApplicationCommandOptionType.String, required: true }] },
     { name: 'senha', description: 'Gera senha forte', options: [{ name: 'tamanho', type: ApplicationCommandOptionType.Integer, required: false, min_value: 6, max_value: 64 }] },
-    // AFK / misc
+    // AFK
     { name: 'afk', description: 'Define status AFK', options: [{ name: 'motivo', type: ApplicationCommandOptionType.String, required: false }] }
 ];
 
@@ -198,20 +248,20 @@ client.once('ready', async () => {
     console.log(`💙 Bluudud online como ${client.user.tag}`);
 
     try {
-        // === MODO RÁPIDO: registra só no servidor (aparece quase instantâneo) ===
-        const GUILD_ID = '1529716247468703795'; // clique com direito no servidor → Copiar ID do Servidor
-
-        const guild = client.guilds.cache.get(GUILD_ID);
-        if (guild) {
-            await guild.commands.set(commandsData);
-            console.log(`✅ ${commandsData.length} comandos registrados no servidor ${guild.name}`);
+        const GUILD_ID = process.env.GUILD_ID; // coloque no .env / Render
+        if (GUILD_ID) {
+            const guild = client.guilds.cache.get(GUILD_ID);
+            if (guild) {
+                await guild.commands.set(commandsData);
+                console.log(`✅ ${commandsData.length} comandos registrados no servidor ${guild.name}`);
+            } else {
+                console.log('❌ GUILD_ID definido, mas servidor não encontrado.');
+            }
         } else {
-            console.log('❌ Servidor não encontrado. Verifique o GUILD_ID');
+            // fallback global (pode demorar até 1h)
+            await client.application.commands.set(commandsData);
+            console.log(`✅ ${commandsData.length} comandos registrados globalmente`);
         }
-
-        // Se quiser voltar para global depois, use esta linha:
-        // await client.application.commands.set(commandsData);
-
     } catch (e) {
         console.error('Erro ao registrar comandos:', e);
     }
@@ -249,6 +299,27 @@ client.on('guildMemberAdd', async (member) => {
     }
 });
 
+// ==================== AFK MENTION ====================
+client.on('messageCreate', async (message) => {
+    if (message.author.bot || !message.guild) return;
+
+    // Remove AFK se a pessoa falou
+    if (afkMap.has(message.author.id)) {
+        afkMap.delete(message.author.id);
+        message.reply({ embeds: [emb('👋 Bem-vindo de volta!', 'Seu status AFK foi removido.', { thumb: BLUU.face })] }).catch(() => {});
+    }
+
+    // Avisa se mencionou alguém AFK
+    if (message.mentions.users.size > 0) {
+        for (const [, user] of message.mentions.users) {
+            if (afkMap.has(user.id)) {
+                const motivo = afkMap.get(user.id);
+                message.reply({ embeds: [emb('💤 Usuário AFK', `**${user.username}** está AFK: ${motivo}`, { thumb: BLUU.face })] }).catch(() => {});
+            }
+        }
+    }
+});
+
 // ==================== INTERACTIONS ====================
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
@@ -263,6 +334,7 @@ client.on('interactionCreate', async (interaction) => {
             const canal = options.getChannel('canal');
             if (!configBoasVindas.has(guild.id)) configBoasVindas.set(guild.id, {});
             configBoasVindas.get(guild.id).canalId = canal.id;
+            persistConfig();
             return interaction.reply({ embeds: [emb('✅ Canal definido', `Boas-vindas em ${canal}`, { image: BLUU.dance })] });
         }
         if (cmd === 'config-mensagem') {
@@ -271,6 +343,7 @@ client.on('interactionCreate', async (interaction) => {
             }
             if (!configBoasVindas.has(guild.id)) configBoasVindas.set(guild.id, {});
             configBoasVindas.get(guild.id).mensagem = options.getString('mensagem');
+            persistConfig();
             return interaction.reply({ embeds: [emb('✅ Mensagem salva', options.getString('mensagem'), { thumb: BLUU.face })] });
         }
         if (cmd === 'config-cargo') {
@@ -279,6 +352,7 @@ client.on('interactionCreate', async (interaction) => {
             }
             if (!configBoasVindas.has(guild.id)) configBoasVindas.set(guild.id, {});
             configBoasVindas.get(guild.id).cargoId = options.getRole('cargo').id;
+            persistConfig();
             return interaction.reply({ embeds: [emb('✅ Cargo definido', `${options.getRole('cargo')}`, { thumb: BLUU.face })] });
         }
 
@@ -297,7 +371,7 @@ client.on('interactionCreate', async (interaction) => {
                         { name: '🛡️ Mod', value: '`/limpar` `/expulsar` `/banir` `/mutar` `/lock` `/warn`' },
                         { name: '💰 Eco', value: '`/saldo` `/daily` `/trabalhar` `/apostar` `/roubar` `/slots` `/ranking`' },
                         { name: '😂 Fun', value: '`/meme` `/8ball` `/ship` `/bluudanc` `/jokenpo` `/zoar`' },
-                        { name: '🤖 IA', value: '`/ai` `/traduzir` `/resumir` `/corrigir`' }
+                        { name: 'ℹ️ Util', value: '`/ping` `/serverinfo` `/userinfo` `/avatar` `/uptime`' }
                     ]
                 })]
             });
@@ -339,7 +413,21 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.reply({ embeds: [emb('⏱️ Uptime', `**${h}h ${m}m ${sec}s**`, { thumb: BLUU.face })] });
         }
         if (cmd === 'convite') {
-            const url = `https://discord.com/api/oauth2/authorize?client_id=${client.user.id}&permissions=8&scope=bot%20applications.commands`;
+            // Permissões mais razoáveis (não Administrator)
+            const perms = [
+                PermissionsBitField.Flags.ManageChannels,
+                PermissionsBitField.Flags.KickMembers,
+                PermissionsBitField.Flags.BanMembers,
+                PermissionsBitField.Flags.ManageMessages,
+                PermissionsBitField.Flags.ModerateMembers,
+                PermissionsBitField.Flags.ManageNicknames,
+                PermissionsBitField.Flags.SendMessages,
+                PermissionsBitField.Flags.EmbedLinks,
+                PermissionsBitField.Flags.AttachFiles,
+                PermissionsBitField.Flags.ReadMessageHistory,
+                PermissionsBitField.Flags.AddReactions
+            ].reduce((a, b) => a | b, 0n);
+            const url = `https://discord.com/api/oauth2/authorize?client_id=${client.user.id}&permissions=${perms}&scope=bot%20applications.commands`;
             return interaction.reply({ embeds: [emb('🔗 Convite', `[Clique aqui](${url})`, { image: BLUU.dance })] });
         }
         if (cmd === 'falar') {
@@ -352,8 +440,8 @@ client.on('interactionCreate', async (interaction) => {
         if (cmd === 'calculadora') {
             const expr = options.getString('expressao').replace(/[^0-9+\-*/().%\s]/g, '');
             try {
-                // eslint-disable-next-line no-new-func
                 const r = Function(`"use strict"; return (${expr})`)();
+                if (typeof r !== 'number' || !isFinite(r)) throw new Error('invalid');
                 return interaction.reply({ embeds: [emb('🧮 Resultado', `**${r}**`, { thumb: BLUU.face })] });
             } catch {
                 return interaction.reply({ content: 'Expressão inválida.', ephemeral: true });
@@ -391,7 +479,7 @@ client.on('interactionCreate', async (interaction) => {
             const u = options.getUser('usuario');
             const motivo = options.getString('motivo') || 'Sem motivo';
             const m = await guild.members.fetch(u.id).catch(() => null);
-            if (!m || !m.kickable) return interaction.reply({ content: 'Não posso expulsar.', ephemeral: true });
+            if (!m || !m.kickable) return interaction.reply({ content: 'Não posso expulsar esse membro.', ephemeral: true });
             await m.kick(motivo);
             return interaction.reply({ embeds: [emb('👢 Expulso', `**${u.tag}** — ${motivo}`, { thumb: BLUU.face })] });
         }
@@ -401,16 +489,28 @@ client.on('interactionCreate', async (interaction) => {
             }
             const u = options.getUser('usuario');
             const motivo = options.getString('motivo') || 'Sem motivo';
-            await guild.members.ban(u.id, { reason: motivo }).catch(() => null);
-            return interaction.reply({ embeds: [emb('🔨 Banido', `**${u.tag}** — ${motivo}`, { image: BLUU.dance })] });
+            try {
+                const m = await guild.members.fetch(u.id).catch(() => null);
+                if (m && !m.bannable) {
+                    return interaction.reply({ content: 'Não posso banir esse membro (hierarquia).', ephemeral: true });
+                }
+                await guild.members.ban(u.id, { reason: motivo });
+                return interaction.reply({ embeds: [emb('🔨 Banido', `**${u.tag}** — ${motivo}`, { image: BLUU.dance })] });
+            } catch {
+                return interaction.reply({ content: 'Falha ao banir.', ephemeral: true });
+            }
         }
         if (cmd === 'desbanir') {
             if (!member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
                 return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
             }
             const id = options.getString('id');
-            await guild.bans.remove(id).catch(() => null);
-            return interaction.reply({ embeds: [emb('✅ Desbanido', `ID: ${id}`, { thumb: BLUU.face })] });
+            try {
+                await guild.bans.remove(id);
+                return interaction.reply({ embeds: [emb('✅ Desbanido', `ID: ${id}`, { thumb: BLUU.face })] });
+            } catch {
+                return interaction.reply({ content: 'Não foi possível desbanir esse ID.', ephemeral: true });
+            }
         }
         if (cmd === 'mutar') {
             if (!member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
@@ -419,7 +519,7 @@ client.on('interactionCreate', async (interaction) => {
             const u = options.getUser('usuario');
             const min = options.getInteger('minutos');
             const m = await guild.members.fetch(u.id).catch(() => null);
-            if (!m || !m.moderatable) return interaction.reply({ content: 'Não posso mutar.', ephemeral: true });
+            if (!m || !m.moderatable) return interaction.reply({ content: 'Não posso mutar esse membro.', ephemeral: true });
             await m.timeout(min * 60 * 1000, options.getString('motivo') || 'Mute');
             return interaction.reply({ embeds: [emb('🔇 Mutado', `**${u.tag}** por **${min}min**`, { thumb: BLUU.face })] });
         }
@@ -465,6 +565,7 @@ client.on('interactionCreate', async (interaction) => {
             const list = warns.get(key) || [];
             list.push({ motivo, by: user.id, at: Date.now() });
             warns.set(key, list);
+            persistWarns();
             return interaction.reply({ embeds: [emb('⚠️ Warn', `**${u.tag}** — ${motivo}\nTotal: **${list.length}**`, { thumb: BLUU.face })] });
         }
         if (cmd === 'setnick') {
@@ -489,20 +590,22 @@ client.on('interactionCreate', async (interaction) => {
         }
         if (cmd === 'daily') {
             const cd = checkCd(user.id, 'daily', 24 * 60 * 60 * 1000);
-            if (cd) return interaction.reply({ content: `Espere **${cd}s**.`, ephemeral: true });
+            if (cd) return interaction.reply({ content: `Espere **${formatTime(cd)}**.`, ephemeral: true });
             const c = iniciarConta(user.id);
             const ganho = 200 + Math.floor(Math.random() * 150);
             c.carteira += ganho;
+            persistBanco();
             return interaction.reply({ embeds: [emb('🎁 Daily', `Você ganhou **${ganho}** 🪙\nSaldo: **${c.carteira}**`, { image: BLUU.dance })] });
         }
         if (cmd === 'trabalhar') {
             const cd = checkCd(user.id, 'trabalhar', 15 * 60 * 1000);
-            if (cd) return interaction.reply({ content: `Descanse **${cd}s**.`, ephemeral: true });
+            if (cd) return interaction.reply({ content: `Descanse **${formatTime(cd)}**.`, ephemeral: true });
             const jobs = ['streamar', 'entregar pizza', 'hackear (de mentira)', 'dançar bluudanc', 'farmar'];
             const job = jobs[Math.floor(Math.random() * jobs.length)];
             const ganho = 50 + Math.floor(Math.random() * 100);
             const c = iniciarConta(user.id);
             c.carteira += ganho;
+            persistBanco();
             return interaction.reply({ embeds: [emb('💼 Trabalho', `Você foi **${job}** e ganhou **${ganho}** 🪙`, { image: BLUU.dance })] });
         }
         if (cmd === 'apostar') {
@@ -510,8 +613,9 @@ client.on('interactionCreate', async (interaction) => {
             const c = iniciarConta(user.id);
             if (c.carteira < valor) return interaction.reply({ content: 'Saldo insuficiente.', ephemeral: true });
             const win = Math.random() < 0.45;
-            if (win) { c.carteira += valor; }
-            else { c.carteira -= valor; }
+            if (win) c.carteira += valor;
+            else c.carteira -= valor;
+            persistBanco();
             return interaction.reply({
                 embeds: [emb(win ? '🎉 Ganhou!' : '😢 Perdeu', `${win ? '+' : '-'}${valor} 🪙\nSaldo: **${c.carteira}**`, { image: win ? BLUU.dance : BLUU.face })]
             });
@@ -525,11 +629,12 @@ client.on('interactionCreate', async (interaction) => {
             if (c.carteira < valor) return interaction.reply({ content: 'Saldo insuficiente.', ephemeral: true });
             c.carteira -= valor;
             t.carteira += valor;
+            persistBanco();
             return interaction.reply({ embeds: [emb('💝 Doação', `Você doou **${valor}** 🪙 para **${alvo.username}**`, { thumb: BLUU.face })] });
         }
         if (cmd === 'roubar') {
             const cd = checkCd(user.id, 'roubar', 10 * 60 * 1000);
-            if (cd) return interaction.reply({ content: `Espere **${cd}s**.`, ephemeral: true });
+            if (cd) return interaction.reply({ content: `Espere **${formatTime(cd)}**.`, ephemeral: true });
             const alvo = options.getUser('usuario');
             if (alvo.id === user.id || alvo.bot) return interaction.reply({ content: 'Alvo inválido.', ephemeral: true });
             const c = iniciarConta(user.id);
@@ -539,23 +644,27 @@ client.on('interactionCreate', async (interaction) => {
                 const q = Math.floor(t.carteira * (0.1 + Math.random() * 0.2));
                 t.carteira -= q;
                 c.carteira += q;
+                persistBanco();
                 return interaction.reply({ embeds: [emb('🕵️ Roubo!', `Você roubou **${q}** 🪙 de **${alvo.username}**`, { image: BLUU.dance })] });
             }
             const multa = Math.min(c.carteira, 30 + Math.floor(Math.random() * 50));
             c.carteira -= multa;
+            persistBanco();
             return interaction.reply({ embeds: [emb('🚨 Pego!', `Você pagou **${multa}** 🪙 de multa`, { thumb: BLUU.face })] });
         }
         if (cmd === 'crime') {
             const cd = checkCd(user.id, 'crime', 8 * 60 * 1000);
-            if (cd) return interaction.reply({ content: `Espere **${cd}s**.`, ephemeral: true });
+            if (cd) return interaction.reply({ content: `Espere **${formatTime(cd)}**.`, ephemeral: true });
             const c = iniciarConta(user.id);
             if (Math.random() < 0.5) {
                 const g = 80 + Math.floor(Math.random() * 120);
                 c.carteira += g;
+                persistBanco();
                 return interaction.reply({ embeds: [emb('🕶️ Crime sucesso', `+**${g}** 🪙`, { image: BLUU.dance })] });
             }
             const m = Math.min(c.carteira, 40 + Math.floor(Math.random() * 60));
             c.carteira -= m;
+            persistBanco();
             return interaction.reply({ embeds: [emb('🚔 Falhou', `−**${m}** 🪙`, { thumb: BLUU.face })] });
         }
         if (cmd === 'slots') {
@@ -575,6 +684,7 @@ client.on('interactionCreate', async (interaction) => {
                 c.carteira -= valor;
                 result += `\n−${valor} 🪙`;
             }
+            persistBanco();
             return interaction.reply({ embeds: [emb('🎰 Slots', result + `\nSaldo: **${c.carteira}**`, { image: BLUU.dance })] });
         }
         if (cmd === 'ranking') {
@@ -591,6 +701,7 @@ client.on('interactionCreate', async (interaction) => {
             if (c.carteira < valor) return interaction.reply({ content: 'Saldo insuficiente.', ephemeral: true });
             c.carteira -= valor;
             c.banco += valor;
+            persistBanco();
             return interaction.reply({ embeds: [emb('🏦 Depósito', `**${valor}** 🪙 guardados`, { thumb: BLUU.face })] });
         }
         if (cmd === 'sacar') {
@@ -599,6 +710,7 @@ client.on('interactionCreate', async (interaction) => {
             if (c.banco < valor) return interaction.reply({ content: 'Banco insuficiente.', ephemeral: true });
             c.banco -= valor;
             c.carteira += valor;
+            persistBanco();
             return interaction.reply({ embeds: [emb('🏦 Saque', `**${valor}** 🪙 sacados`, { thumb: BLUU.face })] });
         }
 
@@ -698,13 +810,12 @@ client.on('interactionCreate', async (interaction) => {
             const ops = ['pedra', 'papel', 'tesoura'];
             const bot = ops[Math.floor(Math.random() * 3)];
             let res = 'Empate!';
-            if (escolha === bot) res = 'Empate!';
-            else if (
+            if (
                 (escolha === 'pedra' && bot === 'tesoura') ||
                 (escolha === 'papel' && bot === 'pedra') ||
                 (escolha === 'tesoura' && bot === 'papel')
             ) res = 'Você ganhou! 🎉';
-            else res = 'Bluudud ganhou! Mwehehe';
+            else if (escolha !== bot) res = 'Bluudud ganhou! Mwehehe';
             return interaction.reply({ embeds: [emb('✊ Jokenpô', `Você: **${escolha}**\nBot: **${bot}**\n${res}`, { image: BLUU.dance })] });
         }
         if (cmd === 'roleta') {
@@ -727,31 +838,6 @@ client.on('interactionCreate', async (interaction) => {
                     footer: 'Bluudud · Forsaken'
                 })]
             });
-        }
-
-        // ---- IA ----
-        if (cmd === 'ai') {
-            await interaction.deferReply();
-            const reply = await askGroq(options.getString('mensagem'));
-            return interaction.editReply({
-                embeds: [emb('🤖 Bluudud AI', reply, { image: BLUU.dance, footer: 'Groq · llama-3.3-70b' })]
-            });
-        }
-        if (cmd === 'traduzir') {
-            await interaction.deferReply();
-            const idioma = options.getString('idioma') || 'português';
-            const reply = await askGroq(`Traduza para ${idioma}:\n\n${options.getString('texto')}`, 'Apenas a tradução, sem explicação.');
-            return interaction.editReply({ embeds: [emb('🌐 Tradução', reply, { thumb: BLUU.face })] });
-        }
-        if (cmd === 'resumir') {
-            await interaction.deferReply();
-            const reply = await askGroq(`Resuma de forma clara:\n\n${options.getString('texto')}`, 'Apenas o resumo.');
-            return interaction.editReply({ embeds: [emb('📝 Resumo', reply, { thumb: BLUU.face })] });
-        }
-        if (cmd === 'corrigir') {
-            await interaction.deferReply();
-            const reply = await askGroq(`Corrija a gramática/ortografia:\n\n${options.getString('texto')}`, 'Apenas o texto corrigido.');
-            return interaction.editReply({ embeds: [emb('✏️ Correção', reply, { thumb: BLUU.face })] });
         }
         if (cmd === 'senha') {
             const len = options.getInteger('tamanho') || 16;
@@ -779,19 +865,28 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-client.login(process.env.TOKEN);
+client.login(process.env.TOKEN).catch(err => {
+    console.error('Falha no login do bot:', err.message);
+    process.exit(1);
+});
 
 // ==================== EXPRESS + OAUTH2 ====================
 const app = express();
 app.set('trust proxy', 1);
+
+const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RENDER;
+
+if (isProduction && (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === 'ronaldo2627')) {
+    console.warn('⚠️ SESSION_SECRET fraco ou não definido! Defina um valor forte no ambiente.');
+}
 
 app.use(session({
     secret: process.env.SESSION_SECRET || 'bluudud-troque-este-segredo',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true,        // Render usa HTTPS
-        sameSite: 'none',
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax',
         maxAge: 1000 * 60 * 60 * 24 * 7
     }
 }));
@@ -905,6 +1000,7 @@ app.post('/api/welcome/:guildId', (req, res) => {
     if (channelId !== undefined) cfg.canalId = channelId || null;
     if (message !== undefined) cfg.mensagem = message || null;
     if (roleId !== undefined) cfg.cargoId = roleId || null;
+    persistConfig();
     res.json({ success: true });
 });
 
@@ -933,6 +1029,7 @@ app.post('/api/welcome/:guildId/test', async (req, res) => {
     }
 });
 
+// ==================== IA SÓ NO SITE ====================
 app.post('/api/ai', async (req, res) => {
     if (!req.session.user) return res.status(401).json({ error: 'Não autenticado' });
     const { message } = req.body;
