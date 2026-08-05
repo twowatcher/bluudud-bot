@@ -189,12 +189,12 @@ function formatTime(seconds) {
 
 // ==================== COMMANDS ====================
 const commandsData = [
-    // Config
+    // ===== CONFIG (3) =====
     { name: 'config-boasvindas', description: 'Define o canal de boas-vindas', options: [{ name: 'canal', description: 'Canal de texto', type: ApplicationCommandOptionType.Channel, channelTypes: [ChannelType.GuildText], required: true }] },
     { name: 'config-mensagem', description: 'Mensagem de boas-vindas', options: [{ name: 'mensagem', description: 'Use {membro} {servidor} {total}', type: ApplicationCommandOptionType.String, required: true }] },
     { name: 'config-cargo', description: 'Cargo automático de boas-vindas', options: [{ name: 'cargo', description: 'Cargo', type: ApplicationCommandOptionType.Role, required: true }] },
 
-    // Util
+    // ===== UTIL (10) =====
     { name: 'ping', description: 'Latência do bot' },
     { name: 'ajuda', description: 'Lista de comandos' },
     { name: 'serverinfo', description: 'Info do servidor' },
@@ -205,25 +205,8 @@ const commandsData = [
     { name: 'falar', description: 'Bot fala algo', options: [{ name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }] },
     { name: 'calculadora', description: 'Calcula expressão', options: [{ name: 'expressao', description: 'Expressão matemática', type: ApplicationCommandOptionType.String, required: true }] },
     { name: 'sorteio', description: 'Sorteia entre opções', options: [{ name: 'opcoes', description: 'Separe por vírgula', type: ApplicationCommandOptionType.String, required: true }] },
-    { name: 'regras', description: 'Mostra regras sugeridas' },
-    { name: 'links', description: 'Links úteis' },
-    { name: 'base64', description: 'Codifica/decodifica base64', options: [
-        { name: 'modo', description: 'encode ou decode', type: ApplicationCommandOptionType.String, required: true, choices: [{ name: 'encode', value: 'encode' }, { name: 'decode', value: 'decode' }] },
-        { name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }
-    ]},
-    { name: 'binario', description: 'Texto ↔ binário', options: [
-        { name: 'modo', description: 'encode ou decode', type: ApplicationCommandOptionType.String, required: true, choices: [{ name: 'encode', value: 'encode' }, { name: 'decode', value: 'decode' }] },
-        { name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }
-    ]},
-    { name: 'hex', description: 'Texto para hex', options: [{ name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }] },
-    { name: 'morse', description: 'Texto para morse', options: [{ name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }] },
-    { name: 'lembrete', description: 'Cria um lembrete', options: [
-        { name: 'minutos', description: 'Daqui quantos minutos', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1, max_value: 1440 },
-        { name: 'texto', description: 'O que lembrar', type: ApplicationCommandOptionType.String, required: true }
-    ]},
-    { name: 'tempo', description: 'Data e hora atual' },
 
-    // Mod
+    // ===== MOD (13) =====
     { name: 'limpar', description: 'Apaga mensagens', options: [{ name: 'quantidade', description: '1 a 100', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1, max_value: 100 }] },
     { name: 'expulsar', description: 'Expulsa um membro', options: [
         { name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true },
@@ -243,7 +226,6 @@ const commandsData = [
     { name: 'lock', description: 'Tranca o canal' },
     { name: 'unlock', description: 'Destranca o canal' },
     { name: 'modolento', description: 'Slowmode', options: [{ name: 'segundos', description: 'Segundos (0 = off)', type: ApplicationCommandOptionType.Integer, required: true, min_value: 0, max_value: 21600 }] },
-    { name: 'slowmode', description: 'Alias de modolento', options: [{ name: 'segundos', description: 'Segundos', type: ApplicationCommandOptionType.Integer, required: true, min_value: 0, max_value: 21600 }] },
     { name: 'warn', description: 'Avisa um membro', options: [
         { name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true },
         { name: 'motivo', description: 'Motivo', type: ApplicationCommandOptionType.String, required: false }
@@ -255,16 +237,12 @@ const commandsData = [
         { name: 'apelido', description: 'Novo apelido', type: ApplicationCommandOptionType.String, required: true }
     ]},
 
-    // Economia
+    // ===== ECONOMIA (15) =====
     { name: 'saldo', description: 'Seu saldo', options: [{ name: 'usuario', description: 'Usuário', type: ApplicationCommandOptionType.User, required: false }] },
     { name: 'daily', description: 'Recompensa diária' },
     { name: 'trabalhar', description: 'Trabalha e ganha coins' },
     { name: 'apostar', description: 'Aposta coins', options: [{ name: 'valor', description: 'Valor', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1 }] },
     { name: 'doar', description: 'Doa coins', options: [
-        { name: 'usuario', description: 'Quem recebe', type: ApplicationCommandOptionType.User, required: true },
-        { name: 'valor', description: 'Valor', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1 }
-    ]},
-    { name: 'pay', description: 'Paga coins', options: [
         { name: 'usuario', description: 'Quem recebe', type: ApplicationCommandOptionType.User, required: true },
         { name: 'valor', description: 'Valor', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1 }
     ]},
@@ -279,9 +257,8 @@ const commandsData = [
     { name: 'inventario', description: 'Seu inventário', options: [{ name: 'usuario', description: 'Usuário', type: ApplicationCommandOptionType.User, required: false }] },
     { name: 'usar', description: 'Usa um item', options: [{ name: 'item', description: 'Item', type: ApplicationCommandOptionType.String, required: true }] },
 
-    // Nível
+    // ===== NÍVEL (4) =====
     { name: 'rank', description: 'Mostra nível/XP', options: [{ name: 'usuario', description: 'Usuário', type: ApplicationCommandOptionType.User, required: false }] },
-    { name: 'nivel', description: 'Alias de /rank', options: [{ name: 'usuario', description: 'Usuário', type: ApplicationCommandOptionType.User, required: false }] },
     { name: 'topnivel', description: 'Ranking de níveis' },
     { name: 'setnivel', description: 'Define nível (staff)', options: [
         { name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true },
@@ -289,7 +266,7 @@ const commandsData = [
     ]},
     { name: 'resetnivel', description: 'Reseta nível (staff)', options: [{ name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true }] },
 
-    // Social
+    // ===== SOCIAL (6) =====
     { name: 'perfil', description: 'Perfil completo', options: [{ name: 'usuario', description: 'Usuário', type: ApplicationCommandOptionType.User, required: false }] },
     { name: 'rep', description: 'Dá reputação', options: [{ name: 'usuario', description: 'Quem recebe', type: ApplicationCommandOptionType.User, required: true }] },
     { name: 'casar', description: 'Pede em casamento', options: [{ name: 'usuario', description: 'Pessoa', type: ApplicationCommandOptionType.User, required: true }] },
@@ -297,7 +274,7 @@ const commandsData = [
     { name: 'status', description: 'Status personalizado', options: [{ name: 'texto', description: 'Seu status', type: ApplicationCommandOptionType.String, required: true }] },
     { name: 'afk', description: 'Define status AFK', options: [{ name: 'motivo', description: 'Motivo', type: ApplicationCommandOptionType.String, required: false }] },
 
-    // Diversão
+    // ===== DIVERSÃO (25) =====
     { name: 'meme', description: 'Meme Bluudud' },
     { name: 'dado', description: 'Rola um dado', options: [{ name: 'lados', description: 'Lados (padrão 6)', type: ApplicationCommandOptionType.Integer, required: false, min_value: 2, max_value: 100 }] },
     { name: 'moeda', description: 'Cara ou coroa' },
@@ -319,9 +296,6 @@ const commandsData = [
     { name: 'gado', description: 'Nível de gado', options: [{ name: 'usuario', description: 'Usuário', type: ApplicationCommandOptionType.User, required: false }] },
     { name: 'chances', description: 'Chances de algo', options: [{ name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }] },
     { name: 'escolha', description: 'Escolhe entre opções', options: [{ name: 'opcoes', description: 'Separe por vírgula', type: ApplicationCommandOptionType.String, required: true }] },
-    { name: 'diga', description: 'Repete texto', options: [{ name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }] },
-    { name: 'votar', description: 'Cria enquete', options: [{ name: 'pergunta', description: 'Pergunta', type: ApplicationCommandOptionType.String, required: true }] },
-    { name: 'reverso', description: 'Inverte o texto', options: [{ name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }] },
     { name: 'jokenpo', description: 'Pedra papel tesoura', options: [{ name: 'escolha', description: 'Sua escolha', type: ApplicationCommandOptionType.String, required: true, choices: [
         { name: 'Pedra', value: 'pedra' }, { name: 'Papel', value: 'papel' }, { name: 'Tesoura', value: 'tesoura' }
     ]}]},
@@ -330,23 +304,13 @@ const commandsData = [
     { name: 'bluudanc', description: 'Bluudud dançando' },
     { name: 'bluudud', description: 'Info / GIF Bluudud' },
     { name: 'senha', description: 'Gera senha forte', options: [{ name: 'tamanho', description: 'Tamanho 6-64', type: ApplicationCommandOptionType.Integer, required: false, min_value: 6, max_value: 64 }] },
-    { name: 'fato', description: 'Fato aleatório' },
-    { name: 'conselho', description: 'Conselho do Bluudud' },
-    { name: 'emojify', description: 'Texto em emojis', options: [{ name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }] },
-    { name: 'clap', description: '👏 entre palavras', options: [{ name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }] },
-    { name: 'mock', description: 'TeXtO mOcK', options: [{ name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }] },
     { name: 'pp', description: 'Tamanho do pp', options: [{ name: 'usuario', description: 'Usuário', type: ApplicationCommandOptionType.User, required: false }] },
-    { name: 'rate', description: 'Avalia de 0 a 10', options: [{ name: 'texto', description: 'O que avaliar', type: ApplicationCommandOptionType.String, required: true }] },
-    { name: 'hack', description: 'Hack fictício', options: [{ name: 'usuario', description: 'Alvo', type: ApplicationCommandOptionType.User, required: true }] },
-    { name: 'cat', description: 'Foto de gato' },
-    { name: 'dog', description: 'Foto de cachorro' },
-    { name: 'fox', description: 'Foto de raposa' },
 
-    // IA
+    // ===== IA (4) =====
     { name: 'ai', description: 'Conversa com a IA Bluudud', options: [{ name: 'mensagem', description: 'Sua mensagem', type: ApplicationCommandOptionType.String, required: true }] },
     { name: 'traduzir', description: 'Traduz texto', options: [
         { name: 'texto', description: 'Texto para traduzir', type: ApplicationCommandOptionType.String, required: true },
-        { name: 'idioma', description: 'Idioma destino (padrão: português)', type: ApplicationCommandOptionType.String, required: false }
+        { name: 'idioma', description: 'Idioma destino', type: ApplicationCommandOptionType.String, required: false }
     ]},
     { name: 'resumir', description: 'Resume texto', options: [{ name: 'texto', description: 'Texto para resumir', type: ApplicationCommandOptionType.String, required: true }] },
     { name: 'corrigir', description: 'Corrige gramática', options: [{ name: 'texto', description: 'Texto para corrigir', type: ApplicationCommandOptionType.String, required: true }] }
