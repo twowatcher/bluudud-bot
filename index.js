@@ -6,7 +6,14 @@ const {
     PermissionsBitField,
     ApplicationCommandOptionType,
     ChannelType,
-    AttachmentBuilder
+    AttachmentBuilder,
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle
 } = require('discord.js');
 const express = require('express');
 const session = require('express-session');
@@ -56,6 +63,7 @@ const marriages = new Map(Object.entries(loadJSON('marriages.json', {})));
 const cooldowns = new Map();
 const afkMap = new Map();
 const customStatus = new Map();
+const aiConversations = new Map(); // conversas da IA por canal+user
 
 function persistBanco() { saveJSON('banco.json', Object.fromEntries(banco)); }
 function persistConfig() { saveJSON('config.json', Object.fromEntries(configBoasVindas)); }
@@ -108,11 +116,6 @@ const LOJA_ITENS = {
     tag_og:       { preco: 5000, tipo: 'tag',  desc: 'Tag OG', emoji: '🔥', label: 'OG' }
 };
 
-const LOJA_CHOICES = Object.entries(LOJA_ITENS).map(([id, info]) => ({
-    name: `${info.emoji} ${info.tipo === 'tag' ? info.label : id} — ${info.preco}🪙`.slice(0, 100),
-    value: id
-}));
-
 function getInv(id) {
     if (!inventory.has(id)) {
         inventory.set(id, { tags: [], equippedTag: null });
@@ -123,23 +126,19 @@ function getInv(id) {
     if (inv.equippedTag === undefined) inv.equippedTag = null;
     return inv;
 }
-
 function getTagDisplay(userId) {
     const inv = getInv(userId);
     if (!inv.equippedTag || !LOJA_ITENS[inv.equippedTag]) return null;
     const t = LOJA_ITENS[inv.equippedTag];
     return `${t.emoji} ${t.label}`;
 }
-
 function formatUser(userId, username) {
     const tag = getTagDisplay(userId);
     return tag ? `[${tag}] ${username}` : username;
 }
-
 async function applyTagRole(guild, member, tagId) {
     const cfg = configBoasVindas.get(guild.id) || {};
     const tagRoles = cfg.tagRoles || {};
-    // remove old tag roles
     for (const [tid, roleId] of Object.entries(tagRoles)) {
         const role = guild.roles.cache.get(roleId);
         if (role && member.roles.cache.has(roleId) && tid !== tagId) {
@@ -152,7 +151,7 @@ async function applyTagRole(guild, member, tagId) {
     }
 }
 
-// ==================== CANVAS (perfil + leaderboard) ====================
+// ==================== CANVAS ====================
 function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -162,24 +161,17 @@ function roundRect(ctx, x, y, w, h, r) {
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
 }
-
 async function generateProfileCard(user, levelData, coins, rep, tagText) {
     const width = 800, height = 300;
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
-
-    // fundo
     const grad = ctx.createLinearGradient(0, 0, width, height);
     grad.addColorStop(0, '#0b1a2b');
     grad.addColorStop(1, '#1a3a5c');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, height);
-
-    // barra azul
     ctx.fillStyle = '#4db8ff';
     ctx.fillRect(0, 0, 12, height);
-
-    // avatar
     try {
         const avatar = await loadImage(user.displayAvatarURL({ extension: 'png', size: 256 }));
         ctx.save();
@@ -189,7 +181,6 @@ async function generateProfileCard(user, levelData, coins, rep, tagText) {
         ctx.clip();
         ctx.drawImage(avatar, 40, 70, 160, 160);
         ctx.restore();
-        // ring
         ctx.strokeStyle = '#4db8ff';
         ctx.lineWidth = 6;
         ctx.beginPath();
@@ -201,80 +192,59 @@ async function generateProfileCard(user, levelData, coins, rep, tagText) {
         ctx.arc(120, 150, 80, 0, Math.PI * 2);
         ctx.fill();
     }
-
-    // nome + tag
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 36px Sans';
-    const name = formatUser(user.id, user.username).slice(0, 28);
-    ctx.fillText(name, 230, 90);
-
+    ctx.fillText(formatUser(user.id, user.username).slice(0, 28), 230, 90);
     if (tagText) {
         ctx.fillStyle = '#4db8ff';
         ctx.font = 'bold 22px Sans';
         ctx.fillText(tagText, 230, 125);
     }
-
-    // stats
     ctx.fillStyle = '#b8d4f0';
     ctx.font = '22px Sans';
     ctx.fillText(`Nível ${levelData.level}`, 230, 170);
-    ctx.fillText(`${coins} 🪙`, 400, 170);
-    ctx.fillText(`${rep} ⭐ rep`, 560, 170);
-
-    // XP bar
+    ctx.fillText(`${coins} coins`, 400, 170);
+    ctx.fillText(`${rep} rep`, 560, 170);
     const needed = xpForLevel(levelData.level);
     const pct = Math.min(1, levelData.xp / needed);
     ctx.fillStyle = '#0a1520';
     roundRect(ctx, 230, 200, 500, 28, 14);
     ctx.fill();
     ctx.fillStyle = '#4db8ff';
-    roundRect(ctx, 230, 200, 500 * pct, 28, 14);
+    roundRect(ctx, 230, 200, Math.max(8, 500 * pct), 28, 14);
     ctx.fill();
     ctx.fillStyle = '#ffffff';
     ctx.font = '16px Sans';
     ctx.fillText(`${levelData.xp} / ${needed} XP`, 240, 220);
-
     ctx.fillStyle = '#7aa0c4';
     ctx.font = '16px Sans';
     ctx.fillText('Bluudud Bot · Forsaken', 230, 270);
-
     return canvas.toBuffer('image/png');
 }
-
 async function generateLeaderboardCard(entries, title = 'Top Níveis') {
-    // entries: [{ username, avatarURL, level, xp, tag }]
     const rowH = 70;
     const width = 700;
-    const height = 90 + entries.length * rowH;
+    const height = 90 + Math.max(1, entries.length) * rowH;
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
-
     const grad = ctx.createLinearGradient(0, 0, width, height);
     grad.addColorStop(0, '#0b1a2b');
     grad.addColorStop(1, '#152a45');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, height);
-
     ctx.fillStyle = '#4db8ff';
     ctx.font = 'bold 32px Sans';
     ctx.fillText(title, 30, 50);
-
     for (let i = 0; i < entries.length; i++) {
         const e = entries[i];
         const y = 80 + i * rowH;
-
-        // row bg
         ctx.fillStyle = i % 2 === 0 ? 'rgba(77,184,255,0.08)' : 'rgba(0,0,0,0.15)';
         roundRect(ctx, 20, y, width - 40, rowH - 8, 10);
         ctx.fill();
-
-        // rank
-        const medals = ['🥇', '🥈', '🥉'];
+        const medals = ['#1', '#2', '#3'];
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 24px Sans';
+        ctx.font = 'bold 22px Sans';
         ctx.fillText(medals[i] || `#${i + 1}`, 35, y + 42);
-
-        // avatar
         try {
             if (e.avatarURL) {
                 const av = await loadImage(e.avatarURL);
@@ -287,28 +257,23 @@ async function generateLeaderboardCard(entries, title = 'Top Níveis') {
                 ctx.restore();
             }
         } catch {}
-
-        // name
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 20px Sans';
         const display = e.tag ? `[${e.tag}] ${e.username}` : e.username;
-        ctx.fillText(display.slice(0, 24), 160, y + 28);
-
+        ctx.fillText(String(display).slice(0, 24), 160, y + 28);
         ctx.fillStyle = '#4db8ff';
         ctx.font = '18px Sans';
         ctx.fillText(`Nv ${e.level} · ${e.xp} XP`, 160, y + 52);
     }
-
     return canvas.toBuffer('image/png');
 }
 
-// ==================== BLUU ====================
+// ==================== UI ====================
 const BLUU = {
     color: 0x4db8ff,
     dance: 'https://forsaken.wiki/Special:FilePath/Emotec00lbluudud_CurrentDance.gif',
     face: 'https://forsaken.wiki/Special:FilePath/VeeronicaGrafitti_Bluudud.png'
 };
-
 function emb(title, desc, opts = {}) {
     const e = new EmbedBuilder().setColor(opts.color ?? BLUU.color).setTimestamp();
     if (title) e.setTitle(title);
@@ -320,24 +285,26 @@ function emb(title, desc, opts = {}) {
     return e;
 }
 
-// ==================== GROQ ====================
-async function askGroq(prompt, systemExtra = '') {
+// ==================== GROQ + CONVERSA ====================
+async function askGroq(prompt, systemExtra = '', history = []) {
     const key = process.env.GROQ_API_KEY;
-    if (!key) return '⚠️ GROQ_API_KEY não configurada.';
-    const system = `Você é o Bluudud, personagem azul de Forsaken (Roblox).
-Fale em português brasileiro, divertido, meio streamer.
-Use "mwehehe". Respostas curtas a médias.
+    if (!key) return 'GROQ_API_KEY nao configurada.';
+    const system = `Voce e o Bluudud, personagem azul de Forsaken (Roblox).
+Fale em portugues brasileiro, divertido, meio streamer.
+Use "mwehehe". Respostas curtas a medias.
 ${systemExtra}`.trim();
+    const messages = [
+        { role: 'system', content: system },
+        ...history.slice(-10),
+        { role: 'user', content: prompt }
+    ];
     try {
         const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+            headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: 'llama-3.3-70b-versatile',
-                messages: [
-                    { role: 'system', content: system },
-                    { role: 'user', content: prompt }
-                ],
+                messages,
                 temperature: 0.8,
                 max_tokens: 600
             })
@@ -348,6 +315,20 @@ ${systemExtra}`.trim();
     } catch {
         return 'Falha ao conectar na IA.';
     }
+}
+
+function aiKey(channelId, userId) {
+    return `${channelId}:${userId}`;
+}
+function getHistory(channelId, userId) {
+    return aiConversations.get(aiKey(channelId, userId)) || [];
+}
+function pushHistory(channelId, userId, role, content) {
+    const key = aiKey(channelId, userId);
+    const list = aiConversations.get(key) || [];
+    list.push({ role, content });
+    if (list.length > 20) list.splice(0, list.length - 20);
+    aiConversations.set(key, list);
 }
 
 // ==================== COOLDOWN ====================
@@ -366,297 +347,266 @@ function formatTime(seconds) {
     return `${seconds}s`;
 }
 
-// ==================== API SITE: PERFIL / DAILY / RANK ====================
-app.get('/api/profile', (req, res) => {
-    if (!req.session.user) return res.status(401).json({ error: 'Não autenticado' });
-    const id = req.session.user.id;
-    const c = iniciarConta(id);
-    const lv = getLevelData(id);
-    const inv = getInv(id);
-    const rep = reps.get(id) || 0;
-    const tag = getTagDisplay(id);
-    const dailyCd = (() => {
-        const key = `${id}:daily`;
-        if (!cooldowns.has(key)) return 0;
-        const left = Math.ceil((cooldowns.get(key) - Date.now()) / 1000);
-        return left > 0 ? left : 0;
-    })();
-    res.json({
-        id,
-        username: req.session.user.username,
-        global_name: req.session.user.global_name,
-        avatar: req.session.user.avatar,
-        carteira: c.carteira,
-        banco: c.banco,
-        total: c.carteira + c.banco,
-        level: lv.level,
-        xp: lv.xp,
-        xpNeeded: xpForLevel(lv.level),
-        rep,
-        tag,
-        equippedTag: inv.equippedTag,
-        tags: inv.tags || [],
-        dailyCooldown: dailyCd,
-        marriedTo: marriages.get(id) || null
-    });
-});
+// ==================== PAINEL (SELECT MENUS) ====================
+function painelPrincipal() {
+    const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('painel_main')
+            .setPlaceholder('Escolha uma categoria...')
+            .addOptions(
+                { label: 'Configuracoes', value: 'config', emoji: '⚙️', description: 'Boas-vindas e tags' },
+                { label: 'Moderacao', value: 'mod', emoji: '🛡️', description: 'Lock, limpar, warns...' },
+                { label: 'Economia', value: 'eco', emoji: '💰', description: 'Saldo, daily, slots...' },
+                { label: 'Loja', value: 'loja', emoji: '🛒', description: 'Itens e tags' },
+                { label: 'Nivel', value: 'nivel', emoji: '📊', description: 'Rank e top (imagem)' },
+                { label: 'Social', value: 'social', emoji: '👤', description: 'Perfil, rep, AFK' },
+                { label: 'Diversao', value: 'fun', emoji: '😂', description: 'Jogos e zoeras' },
+                { label: 'Util', value: 'util', emoji: '🔧', description: 'Ping, ajuda, convite' },
+                { label: 'IA', value: 'ai_info', emoji: '🤖', description: 'Como falar com o Bluudud' }
+            )
+    );
+    return {
+        embeds: [emb('💙 Painel Bluudud', 'Selecione uma categoria abaixo.\n\n**IA:** marque o bot (@Bluudud) ou responda a mensagem dele para continuar a conversa.', {
+            image: BLUU.dance,
+            footer: 'Bluudud · container de opcoes'
+        })],
+        components: [row]
+    };
+}
 
-app.post('/api/daily', (req, res) => {
-    if (!req.session.user) return res.status(401).json({ error: 'Não autenticado' });
-    const id = req.session.user.id;
-    const cd = checkCd(id, 'daily', 24 * 60 * 60 * 1000);
-    if (cd) {
-        return res.status(429).json({ error: 'Aguarde', cooldown: cd });
-    }
-    const c = iniciarConta(id);
-    const ganho = 200 + Math.floor(Math.random() * 150);
-    c.carteira += ganho;
-    persistBanco();
-    res.json({ success: true, ganho, saldo: c.carteira });
-});
+function menuConfig() {
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('painel_config')
+            .setPlaceholder('Configuracoes...')
+            .addOptions(
+                { label: 'Ver config', value: 'ver', description: 'Mostra configuracoes atuais' },
+                { label: 'Voltar', value: 'back', emoji: '◀️' }
+            )
+    );
+}
+function menuMod() {
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('painel_mod')
+            .setPlaceholder('Moderacao...')
+            .addOptions(
+                { label: 'Trancar canal', value: 'lock', emoji: '🔒' },
+                { label: 'Destrancar canal', value: 'unlock', emoji: '🔓' },
+                { label: 'Limpar 10 msgs', value: 'limpar10', emoji: '🧹' },
+                { label: 'Limpar 25 msgs', value: 'limpar25', emoji: '🧹' },
+                { label: 'Voltar', value: 'back', emoji: '◀️' }
+            )
+    );
+}
+function menuEco() {
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('painel_eco')
+            .setPlaceholder('Economia...')
+            .addOptions(
+                { label: 'Saldo', value: 'saldo', emoji: '💰' },
+                { label: 'Daily', value: 'daily', emoji: '🎁' },
+                { label: 'Trabalhar', value: 'trabalhar', emoji: '💼' },
+                { label: 'Crime', value: 'crime', emoji: '🕶️' },
+                { label: 'Slots (50)', value: 'slots50', emoji: '🎰' },
+                { label: 'Ranking ricos', value: 'ranking', emoji: '🏆' },
+                { label: 'Voltar', value: 'back', emoji: '◀️' }
+            )
+    );
+}
+function menuLoja() {
+    const opts = Object.entries(LOJA_ITENS).map(([id, info]) => ({
+        label: `${info.label || id} — ${info.preco}`.slice(0, 100),
+        value: `buy_${id}`,
+        emoji: info.emoji,
+        description: info.desc.slice(0, 100)
+    }));
+    opts.push(
+        { label: 'Meu inventario', value: 'inv', emoji: '🎒' },
+        { label: 'Equipar tag VIP', value: 'eq_tag_vip', emoji: '💎' },
+        { label: 'Equipar tag Bluudud', value: 'eq_tag_bluudud', emoji: '💙' },
+        { label: 'Remover tag', value: 'eq_none', emoji: '❌' },
+        { label: 'Ussar pocao', value: 'use_pocao', emoji: '🧪' },
+        { label: 'Uar caixa', value: 'use_caixa', emoji: '📦' },
+        { label: 'Voltar', value: 'back', emoji: '◀️' }
+    );
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('painel_loja')
+            .setPlaceholder('Loja e tags...')
+            .addOptions(opts.slice(0, 25))
+    );
+}
+function menuNivel() {
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('painel_nivel')
+            .setPlaceholder('Nivel...')
+            .addOptions(
+                { label: 'Meu rank (imagem)', value: 'rank', emoji: '📊' },
+                { label: 'Top niveis (imagem)', value: 'top', emoji: '🏆' },
+                { label: 'Voltar', value: 'back', emoji: '◀️' }
+            )
+    );
+}
+function menuSocial() {
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('painel_social')
+            .setPlaceholder('Social...')
+            .addOptions(
+                { label: 'Meu perfil (imagem)', value: 'perfil', emoji: '👤' },
+                { label: 'AFK', value: 'afk', emoji: '💤' },
+                { label: 'Sair AFK', value: 'unafk', emoji: '👋' },
+                { label: 'Divorciar', value: 'divorciar', emoji: '💔' },
+                { label: 'Voltar', value: 'back', emoji: '◀️' }
+            )
+    );
+}
+function menuFun() {
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('painel_fun')
+            .setPlaceholder('Diversao...')
+            .addOptions(
+                { label: 'Meme', value: 'meme', emoji: '😂' },
+                { label: 'Dado', value: 'dado', emoji: '🎲' },
+                { label: 'Moeda', value: 'moeda', emoji: '🪙' },
+                { label: 'Piada', value: 'piada', emoji: '🤣' },
+                { label: 'Cantada', value: 'cantada', emoji: '😏' },
+                { label: 'Bluudanc', value: 'bluudanc', emoji: '💙' },
+                { label: 'How gay', value: 'howgay', emoji: '🌈' },
+                { label: 'Rizz', value: 'rizz', emoji: '😎' },
+                { label: 'Voltar', value: 'back', emoji: '◀️' }
+            )
+    );
+}
+function menuUtil() {
+    return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('painel_util')
+            .setPlaceholder('Utilidades...')
+            .addOptions(
+                { label: 'Ping', value: 'ping', emoji: '🏓' },
+                { label: 'Ajuda', value: 'ajuda', emoji: '📘' },
+                { label: 'Server info', value: 'serverinfo', emoji: '🏠' },
+                { label: 'Uptime', value: 'uptime', emoji: '⏱️' },
+                { label: 'Convite', value: 'convite', emoji: '🔗' },
+                { label: 'Voltar', value: 'back', emoji: '◀️' }
+            )
+    );
+}
 
-app.get('/api/rank', (req, res) => {
-    if (!req.session.user) return res.status(401).json({ error: 'Não autenticado' });
-    const sorted = [...levels.entries()]
-        .map(([id, v]) => ({
-            id,
-            level: v.level || 1,
-            xp: v.xp || 0,
-            tag: getTagDisplay(id)
-        }))
-        .sort((a, b) => b.level - a.level || b.xp - a.xp)
-        .slice(0, 25);
-
-    // enriquecer com username se estiver em cache de algum guild
-    const enriched = sorted.map((e, i) => {
-        let username = e.id;
-        let avatar = null;
-        for (const g of client.guilds.cache.values()) {
-            const m = g.members.cache.get(e.id);
-            if (m) {
-                username = m.user.username;
-                avatar = m.user.displayAvatarURL({ size: 64 });
-                break;
-            }
-        }
-        return { rank: i + 1, ...e, username, avatar };
-    });
-
-    const meId = req.session.user.id;
-    const myData = getLevelData(meId);
-    const myPos = [...levels.entries()]
-        .map(([id, v]) => ({ id, level: v.level || 1, xp: v.xp || 0 }))
-        .sort((a, b) => b.level - a.level || b.xp - a.xp)
-        .findIndex(x => x.id === meId) + 1;
-
-    res.json({
-        top: enriched,
-        me: {
-            id: meId,
-            rank: myPos || null,
-            level: myData.level,
-            xp: myData.xp,
-            tag: getTagDisplay(meId)
-        }
-    });
-});
-// ==================== COMMANDS (GRUPOS) ====================
+// ==================== SLASH (minimos) ====================
 const commandsData = [
     {
+        name: 'painel',
+        description: 'Abre o painel Bluudud (menus de opcoes)'
+    },
+    {
         name: 'config',
-        description: 'Configurações do servidor',
+        description: 'Configuracoes do servidor',
         options: [
-            { type: ApplicationCommandOptionType.Subcommand, name: 'boasvindas', description: 'Canal de boas-vindas', options: [{ name: 'canal', description: 'Canal', type: ApplicationCommandOptionType.Channel, channelTypes: [ChannelType.GuildText], required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'mensagem', description: 'Mensagem de boas-vindas', options: [{ name: 'mensagem', description: '{membro} {servidor} {total}', type: ApplicationCommandOptionType.String, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'cargo', description: 'Cargo automático', options: [{ name: 'cargo', description: 'Cargo', type: ApplicationCommandOptionType.Role, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'tag-cargo', description: 'Vincula tag a um cargo', options: [
-                { name: 'tag', description: 'Tag', type: ApplicationCommandOptionType.String, required: true, choices: [
-                    { name: '💎 VIP', value: 'tag_vip' },
-                    { name: '💙 Bluudud', value: 'tag_bluudud' },
-                    { name: '👑 Lendário', value: 'tag_lendario' },
-                    { name: '📺 Streamer', value: 'tag_streamer' },
-                    { name: '🔥 OG', value: 'tag_og' }
-                ]},
-                { name: 'cargo', description: 'Cargo', type: ApplicationCommandOptionType.Role, required: true }
-            ]},
-            { type: ApplicationCommandOptionType.Subcommand, name: 'ver', description: 'Ver configurações' }
+            {
+                type: ApplicationCommandOptionType.Subcommand,
+                name: 'boasvindas',
+                description: 'Canal de boas-vindas',
+                options: [{ name: 'canal', description: 'Canal', type: ApplicationCommandOptionType.Channel, channelTypes: [ChannelType.GuildText], required: true }]
+            },
+            {
+                type: ApplicationCommandOptionType.Subcommand,
+                name: 'mensagem',
+                description: 'Mensagem de boas-vindas',
+                options: [{ name: 'mensagem', description: '{membro} {servidor} {total}', type: ApplicationCommandOptionType.String, required: true }]
+            },
+            {
+                type: ApplicationCommandOptionType.Subcommand,
+                name: 'cargo',
+                description: 'Cargo automatico',
+                options: [{ name: 'cargo', description: 'Cargo', type: ApplicationCommandOptionType.Role, required: true }]
+            },
+            {
+                type: ApplicationCommandOptionType.Subcommand,
+                name: 'tag-cargo',
+                description: 'Vincula tag a cargo',
+                options: [
+                    {
+                        name: 'tag', description: 'Tag', type: ApplicationCommandOptionType.String, required: true,
+                        choices: [
+                            { name: 'VIP', value: 'tag_vip' },
+                            { name: 'Bluudud', value: 'tag_bluudud' },
+                            { name: 'Lendario', value: 'tag_lendario' },
+                            { name: 'Streamer', value: 'tag_streamer' },
+                            { name: 'OG', value: 'tag_og' }
+                        ]
+                    },
+                    { name: 'cargo', description: 'Cargo', type: ApplicationCommandOptionType.Role, required: true }
+                ]
+            }
         ]
     },
     {
         name: 'mod',
-        description: 'Moderação',
+        description: 'Moderacao avancada',
         options: [
-            { type: ApplicationCommandOptionType.Subcommand, name: 'limpar', description: 'Apagar mensagens', options: [{ name: 'quantidade', description: '1-100', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1, max_value: 100 }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'expulsar', description: 'Expulsar', options: [
-                { name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true },
-                { name: 'motivo', description: 'Motivo', type: ApplicationCommandOptionType.String, required: false }
-            ]},
-            { type: ApplicationCommandOptionType.Subcommand, name: 'banir', description: 'Banir', options: [
-                { name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true },
-                { name: 'motivo', description: 'Motivo', type: ApplicationCommandOptionType.String, required: false }
-            ]},
-            { type: ApplicationCommandOptionType.Subcommand, name: 'desbanir', description: 'Desbanir', options: [{ name: 'id', description: 'ID', type: ApplicationCommandOptionType.String, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'mutar', description: 'Mute', options: [
-                { name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true },
-                { name: 'minutos', description: 'Minutos', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1, max_value: 40320 },
-                { name: 'motivo', description: 'Motivo', type: ApplicationCommandOptionType.String, required: false }
-            ]},
-            { type: ApplicationCommandOptionType.Subcommand, name: 'desmutar', description: 'Desmutar', options: [{ name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'lock', description: 'Trancar canal' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'unlock', description: 'Destrancar canal' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'slowmode', description: 'Slowmode', options: [{ name: 'segundos', description: 'Segundos', type: ApplicationCommandOptionType.Integer, required: true, min_value: 0, max_value: 21600 }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'warn', description: 'Warn', options: [
-                { name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true },
-                { name: 'motivo', description: 'Motivo', type: ApplicationCommandOptionType.String, required: false }
-            ]},
-            { type: ApplicationCommandOptionType.Subcommand, name: 'warns', description: 'Listar warns', options: [{ name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'clearwarns', description: 'Limpar warns', options: [{ name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'setnick', description: 'Mudar nick', options: [
-                { name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true },
-                { name: 'apelido', description: 'Apelido', type: ApplicationCommandOptionType.String, required: true }
-            ]}
-        ]
-    },
-    {
-        name: 'eco',
-        description: 'Economia',
-        options: [
-            { type: ApplicationCommandOptionType.Subcommand, name: 'saldo', description: 'Saldo', options: [{ name: 'usuario', description: 'Usuário', type: ApplicationCommandOptionType.User, required: false }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'daily', description: 'Daily' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'trabalhar', description: 'Trabalhar' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'apostar', description: 'Apostar', options: [{ name: 'valor', description: 'Valor', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1 }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'doar', description: 'Doar', options: [
-                { name: 'usuario', description: 'Usuário', type: ApplicationCommandOptionType.User, required: true },
-                { name: 'valor', description: 'Valor', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1 }
-            ]},
-            { type: ApplicationCommandOptionType.Subcommand, name: 'roubar', description: 'Roubar', options: [{ name: 'usuario', description: 'Alvo', type: ApplicationCommandOptionType.User, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'crime', description: 'Crime' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'slots', description: 'Slots', options: [{ name: 'valor', description: 'Valor', type: ApplicationCommandOptionType.Integer, required: true, min_value: 10 }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'ranking', description: 'Top ricos' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'depositar', description: 'Depositar', options: [{ name: 'valor', description: 'Valor', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1 }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'sacar', description: 'Sacar', options: [{ name: 'valor', description: 'Valor', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1 }] }
-        ]
-    },
-    {
-        name: 'loja',
-        description: 'Loja, inventário e tags',
-        options: [
-            { type: ApplicationCommandOptionType.Subcommand, name: 'ver', description: 'Ver loja' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'comprar', description: 'Comprar', options: [{ name: 'item', description: 'Item/tag', type: ApplicationCommandOptionType.String, required: true, choices: LOJA_CHOICES }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'inventario', description: 'Inventário', options: [{ name: 'usuario', description: 'Usuário', type: ApplicationCommandOptionType.User, required: false }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'usar', description: 'Usar item', options: [{ name: 'item', description: 'Item', type: ApplicationCommandOptionType.String, required: true, choices: [
-                { name: '🧪 Poção', value: 'pocao' },
-                { name: '📦 Caixa', value: 'caixa' }
-            ]}]},
-            { type: ApplicationCommandOptionType.Subcommand, name: 'equipar', description: 'Equipar tag', options: [{ name: 'tag', description: 'Tag', type: ApplicationCommandOptionType.String, required: true, choices: [
-                { name: '💎 VIP', value: 'tag_vip' },
-                { name: '💙 Bluudud', value: 'tag_bluudud' },
-                { name: '👑 Lendário', value: 'tag_lendario' },
-                { name: '📺 Streamer', value: 'tag_streamer' },
-                { name: '🔥 OG', value: 'tag_og' },
-                { name: '❌ Remover', value: 'none' }
-            ]}]}
-        ]
-    },
-    {
-        name: 'nivel',
-        description: 'Sistema de nível',
-        options: [
-            { type: ApplicationCommandOptionType.Subcommand, name: 'rank', description: 'Ver rank (imagem)', options: [{ name: 'usuario', description: 'Usuário', type: ApplicationCommandOptionType.User, required: false }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'top', description: 'Top níveis (imagem)' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'set', description: 'Set nível (staff)', options: [
-                { name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true },
-                { name: 'nivel', description: 'Nível', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1, max_value: 500 }
-            ]},
-            { type: ApplicationCommandOptionType.Subcommand, name: 'reset', description: 'Reset nível (staff)', options: [{ name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true }] }
-        ]
-    },
-    {
-        name: 'social',
-        description: 'Perfil e social',
-        options: [
-            { type: ApplicationCommandOptionType.Subcommand, name: 'perfil', description: 'Perfil com imagem', options: [{ name: 'usuario', description: 'Usuário', type: ApplicationCommandOptionType.User, required: false }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'rep', description: 'Dar rep', options: [{ name: 'usuario', description: 'Usuário', type: ApplicationCommandOptionType.User, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'casar', description: 'Casar', options: [{ name: 'usuario', description: 'Pessoa', type: ApplicationCommandOptionType.User, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'divorciar', description: 'Divorciar' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'status', description: 'Status', options: [{ name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'afk', description: 'AFK', options: [{ name: 'motivo', description: 'Motivo', type: ApplicationCommandOptionType.String, required: false }] }
-        ]
-    },
-    {
-        name: 'fun',
-        description: 'Diversão',
-        options: [
-            { type: ApplicationCommandOptionType.Subcommand, name: 'meme', description: 'Meme' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'dado', description: 'Dado', options: [{ name: 'lados', description: 'Lados', type: ApplicationCommandOptionType.Integer, required: false, min_value: 2, max_value: 100 }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'moeda', description: 'Cara ou coroa' },
-            { type: ApplicationCommandOptionType.Subcommand, name: '8ball', description: '8ball', options: [{ name: 'pergunta', description: 'Pergunta', type: ApplicationCommandOptionType.String, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'ship', description: 'Ship', options: [
-                { name: 'user1', description: 'User 1', type: ApplicationCommandOptionType.User, required: true },
-                { name: 'user2', description: 'User 2', type: ApplicationCommandOptionType.User, required: true }
-            ]},
-            { type: ApplicationCommandOptionType.Subcommand, name: 'abracar', description: 'Abraçar', options: [{ name: 'usuario', description: 'User', type: ApplicationCommandOptionType.User, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'beijar', description: 'Beijar', options: [{ name: 'usuario', description: 'User', type: ApplicationCommandOptionType.User, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'tapa', description: 'Tapa', options: [{ name: 'usuario', description: 'User', type: ApplicationCommandOptionType.User, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'cantada', description: 'Cantada' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'piada', description: 'Piada' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'howgay', description: 'How gay', options: [{ name: 'usuario', description: 'User', type: ApplicationCommandOptionType.User, required: false }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'rizz', description: 'Rizz', options: [{ name: 'usuario', description: 'User', type: ApplicationCommandOptionType.User, required: false }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'jokenpo', description: 'Jokenpô', options: [{ name: 'escolha', description: 'Escolha', type: ApplicationCommandOptionType.String, required: true, choices: [
-                { name: 'Pedra', value: 'pedra' }, { name: 'Papel', value: 'papel' }, { name: 'Tesoura', value: 'tesoura' }
-            ]}]},
-            { type: ApplicationCommandOptionType.Subcommand, name: 'bluudanc', description: 'Bluudanc' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'pp', description: 'PP', options: [{ name: 'usuario', description: 'User', type: ApplicationCommandOptionType.User, required: false }] }
-        ]
-    },
-    {
-        name: 'util',
-        description: 'Utilidades',
-        options: [
-            { type: ApplicationCommandOptionType.Subcommand, name: 'ping', description: 'Ping' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'ajuda', description: 'Ajuda' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'serverinfo', description: 'Server info' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'userinfo', description: 'User info', options: [{ name: 'usuario', description: 'User', type: ApplicationCommandOptionType.User, required: false }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'avatar', description: 'Avatar', options: [{ name: 'usuario', description: 'User', type: ApplicationCommandOptionType.User, required: false }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'uptime', description: 'Uptime' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'convite', description: 'Convite' },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'senha', description: 'Gerar senha', options: [{ name: 'tamanho', description: 'Tamanho', type: ApplicationCommandOptionType.Integer, required: false, min_value: 6, max_value: 64 }] }
-        ]
-    },
-    {
-        name: 'ai',
-        description: 'IA Bluudud',
-        options: [
-            { type: ApplicationCommandOptionType.Subcommand, name: 'falar', description: 'Conversar', options: [{ name: 'mensagem', description: 'Mensagem', type: ApplicationCommandOptionType.String, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'traduzir', description: 'Traduzir', options: [
-                { name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true },
-                { name: 'idioma', description: 'Idioma', type: ApplicationCommandOptionType.String, required: false }
-            ]},
-            { type: ApplicationCommandOptionType.Subcommand, name: 'resumir', description: 'Resumir', options: [{ name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }] },
-            { type: ApplicationCommandOptionType.Subcommand, name: 'corrigir', description: 'Corrigir', options: [{ name: 'texto', description: 'Texto', type: ApplicationCommandOptionType.String, required: true }] }
+            {
+                type: ApplicationCommandOptionType.Subcommand,
+                name: 'banir',
+                description: 'Banir membro',
+                options: [
+                    { name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true },
+                    { name: 'motivo', description: 'Motivo', type: ApplicationCommandOptionType.String, required: false }
+                ]
+            },
+            {
+                type: ApplicationCommandOptionType.Subcommand,
+                name: 'expulsar',
+                description: 'Expulsar',
+                options: [
+                    { name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true },
+                    { name: 'motivo', description: 'Motivo', type: ApplicationCommandOptionType.String, required: false }
+                ]
+            },
+            {
+                type: ApplicationCommandOptionType.Subcommand,
+                name: 'mutar',
+                description: 'Timeout',
+                options: [
+                    { name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true },
+                    { name: 'minutos', description: 'Minutos', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1, max_value: 40320 }
+                ]
+            },
+            {
+                type: ApplicationCommandOptionType.Subcommand,
+                name: 'warn',
+                description: 'Warn',
+                options: [
+                    { name: 'usuario', description: 'Membro', type: ApplicationCommandOptionType.User, required: true },
+                    { name: 'motivo', description: 'Motivo', type: ApplicationCommandOptionType.String, required: false }
+                ]
+            }
         ]
     }
 ];
 
 // ==================== READY ====================
 client.once('ready', async () => {
-    console.log(`💙 Bluudud online como ${client.user.tag}`);
-    console.log(`Servidores: ${client.guilds.cache.size}`);
+    console.log(`Bluudud online como ${client.user.tag}`);
     try {
         const GUILD_ID = process.env.GUILD_ID || '1529716247468703795';
         const guild = client.guilds.cache.get(GUILD_ID);
         if (guild) {
             await guild.commands.set(commandsData);
-            console.log(`✅ ${commandsData.length} grupos registrados em ${guild.name}`);
+            console.log(`Comandos registrados em ${guild.name}`);
         } else {
-            console.log('Servidores:', [...client.guilds.cache.values()].map(g => `${g.name} (${g.id})`).join(', '));
             await client.application.commands.set(commandsData);
-            console.log(`⚠️ Registrado globalmente (${commandsData.length} grupos)`);
+            console.log('Comandos registrados globalmente');
         }
     } catch (e) {
         console.error('Erro ao registrar comandos:', e);
     }
-    client.user.setActivity('tem bluudude get in nowww!!!', { type: 3 });
+    client.user.setActivity('marque-me pra falar | /painel', { type: 3 });
 });
 
 // ==================== WELCOME ====================
@@ -670,7 +620,7 @@ client.on('guildMemberAdd', async (member) => {
         .replace(/{servidor}/g, member.guild.name)
         .replace(/{total}/g, member.guild.memberCount);
     try {
-        await ch.send({ embeds: [emb('✨ Nova chegada!', msg, { image: BLUU.dance, thumb: member.user.displayAvatarURL({ size: 128 }) })] });
+        await ch.send({ embeds: [emb('Nova chegada!', msg, { image: BLUU.dance, thumb: member.user.displayAvatarURL({ size: 128 }) })] });
         if (cfg.cargoId) {
             const role = member.guild.roles.cache.get(cfg.cargoId);
             if (role) await member.roles.add(role).catch(() => {});
@@ -680,731 +630,565 @@ client.on('guildMemberAdd', async (member) => {
     }
 });
 
-// ==================== MESSAGE ====================
+// ==================== MESSAGES: AFK + XP + IA MENCAO/REPLY ====================
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
+    // AFK
     if (afkMap.has(message.author.id)) {
         afkMap.delete(message.author.id);
-        message.reply({ embeds: [emb('👋 Bem-vindo de volta!', 'AFK removido.', { thumb: BLUU.face })] }).catch(() => {});
+        message.reply({ embeds: [emb('Bem-vindo de volta!', 'AFK removido.', { thumb: BLUU.face })] }).catch(() => {});
     }
     if (message.mentions.users.size > 0) {
         for (const [, u] of message.mentions.users) {
+            if (u.id === client.user.id) continue;
             if (afkMap.has(u.id)) {
-                const tag = getTagDisplay(u.id);
-                const nome = tag ? `[${tag}] ${u.username}` : u.username;
-                message.reply({ embeds: [emb('💤 AFK', `**${nome}** está AFK: ${afkMap.get(u.id)}`, { thumb: BLUU.face })] }).catch(() => {});
+                const nome = formatUser(u.id, u.username);
+                message.reply({ embeds: [emb('AFK', `**${nome}** esta AFK: ${afkMap.get(u.id)}`, { thumb: BLUU.face })] }).catch(() => {});
             }
         }
     }
 
+    // XP
     if (!checkCd(message.author.id, 'xp', 45 * 1000)) {
         const result = addXP(message.author.id, 15 + Math.floor(Math.random() * 16));
         if (result.leveled) {
-            const tag = getTagDisplay(message.author.id);
-            const nome = tag ? `[${tag}] ${message.author.username}` : message.author.username;
-            message.channel.send({ embeds: [emb('🎉 Level Up!', `**${nome}** → nível **${result.level}**!`, { image: BLUU.dance })] }).catch(() => {});
+            const nome = formatUser(message.author.id, message.author.username);
+            message.channel.send({ embeds: [emb('Level Up!', `**${nome}** → nivel **${result.level}**!`, { image: BLUU.dance })] }).catch(() => {});
         }
     }
+
+    // ===== IA: mencao ou reply ao bot =====
+    let isAiTrigger = false;
+    let userText = message.content;
+
+    // mencao ao bot
+    if (message.mentions.has(client.user)) {
+        isAiTrigger = true;
+        userText = message.content
+            .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
+            .trim();
+    }
+
+    // reply a mensagem do bot
+    if (message.reference) {
+        try {
+            const ref = await message.fetchReference();
+            if (ref.author?.id === client.user.id) {
+                isAiTrigger = true;
+                // se nao mencionou e so respondeu, usa o texto da reply
+                if (!message.mentions.has(client.user)) userText = message.content.trim();
+            }
+        } catch {}
+    }
+
+    if (!isAiTrigger) return;
+    if (!userText) {
+        return message.reply({ embeds: [emb('Bluudud', 'Mwehehe, fala algo ai! Marca eu + texto, ou responde minhas msgs.', { thumb: BLUU.face })] }).catch(() => {});
+    }
+
+    // cooldown anti-spam IA
+    const cd = checkCd(message.author.id, 'ai_msg', 4 * 1000);
+    if (cd) return;
+
+    const history = getHistory(message.channel.id, message.author.id);
+    const thinking = await message.reply({ embeds: [emb('Bluudud', 'mwehehe pensando...', { thumb: BLUU.face })] }).catch(() => null);
+
+    const reply = await askGroq(userText, '', history);
+    pushHistory(message.channel.id, message.author.id, 'user', userText);
+    pushHistory(message.channel.id, message.author.id, 'assistant', reply);
+
+    const payload = { embeds: [emb('Bluudud AI', reply, { image: BLUU.dance, footer: 'Responda esta msg para continuar a conversa' })] };
+    if (thinking) await thinking.edit(payload).catch(() => message.reply(payload).catch(() => {}));
+    else await message.reply(payload).catch(() => {});
 });
 
 // ==================== INTERACTIONS ====================
 client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-    const { commandName: cmd, options, member, guild, user } = interaction;
-    const sub = options.getSubcommand(false);
-
     try {
-        // ========== CONFIG ==========
-        if (cmd === 'config') {
-            if (!member.permissions.has(PermissionsBitField.Flags.ManageGuild) && sub !== 'ver') {
-                return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
+        // ---- SLASH ----
+        if (interaction.isChatInputCommand()) {
+            const { commandName: cmd, options, member, guild, user } = interaction;
+            const sub = options.getSubcommand(false);
+
+            if (cmd === 'painel') {
+                return interaction.reply({ ...painelPrincipal(), ephemeral: false });
             }
-            if (sub === 'boasvindas') {
-                if (!configBoasVindas.has(guild.id)) configBoasVindas.set(guild.id, {});
-                configBoasVindas.get(guild.id).canalId = options.getChannel('canal').id;
-                persistConfig();
-                return interaction.reply({ embeds: [emb('✅ Canal', `${options.getChannel('canal')}`, { image: BLUU.dance })] });
-            }
-            if (sub === 'mensagem') {
-                if (!configBoasVindas.has(guild.id)) configBoasVindas.set(guild.id, {});
-                configBoasVindas.get(guild.id).mensagem = options.getString('mensagem');
-                persistConfig();
-                return interaction.reply({ embeds: [emb('✅ Mensagem', options.getString('mensagem'), { thumb: BLUU.face })] });
-            }
-            if (sub === 'cargo') {
-                if (!configBoasVindas.has(guild.id)) configBoasVindas.set(guild.id, {});
-                configBoasVindas.get(guild.id).cargoId = options.getRole('cargo').id;
-                persistConfig();
-                return interaction.reply({ embeds: [emb('✅ Cargo', `${options.getRole('cargo')}`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'tag-cargo') {
+
+            if (cmd === 'config') {
+                if (!member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+                    return interaction.reply({ content: 'Sem permissao.', ephemeral: true });
+                }
                 if (!configBoasVindas.has(guild.id)) configBoasVindas.set(guild.id, {});
                 const cfg = configBoasVindas.get(guild.id);
-                if (!cfg.tagRoles) cfg.tagRoles = {};
-                const tag = options.getString('tag');
-                const role = options.getRole('cargo');
-                cfg.tagRoles[tag] = role.id;
-                persistConfig();
-                const info = LOJA_ITENS[tag];
-                return interaction.reply({ embeds: [emb('✅ Tag → Cargo', `${info.emoji} **${info.label}** → ${role}`, { thumb: BLUU.face })] });
+                if (sub === 'boasvindas') {
+                    cfg.canalId = options.getChannel('canal').id;
+                    persistConfig();
+                    return interaction.reply({ embeds: [emb('Canal definido', `${options.getChannel('canal')}`, { image: BLUU.dance })] });
+                }
+                if (sub === 'mensagem') {
+                    cfg.mensagem = options.getString('mensagem');
+                    persistConfig();
+                    return interaction.reply({ embeds: [emb('Mensagem salva', cfg.mensagem, { thumb: BLUU.face })] });
+                }
+                if (sub === 'cargo') {
+                    cfg.cargoId = options.getRole('cargo').id;
+                    persistConfig();
+                    return interaction.reply({ embeds: [emb('Cargo definido', `${options.getRole('cargo')}`, { thumb: BLUU.face })] });
+                }
+                if (sub === 'tag-cargo') {
+                    if (!cfg.tagRoles) cfg.tagRoles = {};
+                    const tag = options.getString('tag');
+                    const role = options.getRole('cargo');
+                    cfg.tagRoles[tag] = role.id;
+                    persistConfig();
+                    const info = LOJA_ITENS[tag];
+                    return interaction.reply({ embeds: [emb('Tag → Cargo', `${info.emoji} **${info.label}** → ${role}`, { thumb: BLUU.face })] });
+                }
             }
-            if (sub === 'ver') {
-                const cfg = configBoasVindas.get(guild.id) || {};
-                const tagLines = cfg.tagRoles
-                    ? Object.entries(cfg.tagRoles).map(([t, rid]) => {
-                        const info = LOJA_ITENS[t];
-                        return `${info?.emoji || ''} ${info?.label || t} → <@&${rid}>`;
-                    }).join('\n') || 'Nenhum'
-                    : 'Nenhum';
-                return interaction.reply({
-                    embeds: [emb('⚙️ Config', null, {
-                        fields: [
-                            { name: 'Canal boas-vindas', value: cfg.canalId ? `<#${cfg.canalId}>` : '—', inline: true },
-                            { name: 'Cargo entrada', value: cfg.cargoId ? `<@&${cfg.cargoId}>` : '—', inline: true },
-                            { name: 'Mensagem', value: cfg.mensagem || 'Padrão' },
-                            { name: 'Tags → Cargos', value: tagLines }
-                        ]
-                    })]
-                });
-            }
-        }
 
-        // ========== MOD ==========
-        if (cmd === 'mod') {
-            if (sub === 'limpar') {
-                if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                await interaction.deferReply({ ephemeral: true });
-                const deleted = await interaction.channel.bulkDelete(options.getInteger('quantidade'), true).catch(() => null);
-                return interaction.editReply(`Apaguei **${deleted?.size || 0}** mensagens.`);
-            }
-            if (sub === 'expulsar') {
-                if (!member.permissions.has(PermissionsBitField.Flags.KickMembers)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                const u = options.getUser('usuario');
-                const motivo = options.getString('motivo') || 'Sem motivo';
-                const m = await guild.members.fetch(u.id).catch(() => null);
-                if (!m || !m.kickable) return interaction.reply({ content: 'Não posso expulsar.', ephemeral: true });
-                await m.kick(motivo);
-                return interaction.reply({ embeds: [emb('👢 Expulso', `**${formatUser(u.id, u.tag)}** — ${motivo}`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'banir') {
-                if (!member.permissions.has(PermissionsBitField.Flags.BanMembers)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                const u = options.getUser('usuario');
-                const motivo = options.getString('motivo') || 'Sem motivo';
-                try {
+            if (cmd === 'mod') {
+                if (sub === 'banir') {
+                    if (!member.permissions.has(PermissionsBitField.Flags.BanMembers)) return interaction.reply({ content: 'Sem permissao.', ephemeral: true });
+                    const u = options.getUser('usuario');
+                    const motivo = options.getString('motivo') || 'Sem motivo';
+                    try {
+                        const m = await guild.members.fetch(u.id).catch(() => null);
+                        if (m && !m.bannable) return interaction.reply({ content: 'Nao posso banir.', ephemeral: true });
+                        await guild.members.ban(u.id, { reason: motivo });
+                        return interaction.reply({ embeds: [emb('Banido', `**${u.tag}** — ${motivo}`, { image: BLUU.dance })] });
+                    } catch {
+                        return interaction.reply({ content: 'Falha ao banir.', ephemeral: true });
+                    }
+                }
+                if (sub === 'expulsar') {
+                    if (!member.permissions.has(PermissionsBitField.Flags.KickMembers)) return interaction.reply({ content: 'Sem permissao.', ephemeral: true });
+                    const u = options.getUser('usuario');
                     const m = await guild.members.fetch(u.id).catch(() => null);
-                    if (m && !m.bannable) return interaction.reply({ content: 'Não posso banir.', ephemeral: true });
-                    await guild.members.ban(u.id, { reason: motivo });
-                    return interaction.reply({ embeds: [emb('🔨 Banido', `**${formatUser(u.id, u.tag)}** — ${motivo}`, { image: BLUU.dance })] });
-                } catch {
-                    return interaction.reply({ content: 'Falha ao banir.', ephemeral: true });
+                    if (!m || !m.kickable) return interaction.reply({ content: 'Nao posso expulsar.', ephemeral: true });
+                    await m.kick(options.getString('motivo') || 'Sem motivo');
+                    return interaction.reply({ embeds: [emb('Expulso', u.tag, { thumb: BLUU.face })] });
+                }
+                if (sub === 'mutar') {
+                    if (!member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return interaction.reply({ content: 'Sem permissao.', ephemeral: true });
+                    const u = options.getUser('usuario');
+                    const m = await guild.members.fetch(u.id).catch(() => null);
+                    if (!m || !m.moderatable) return interaction.reply({ content: 'Nao posso mutar.', ephemeral: true });
+                    await m.timeout(options.getInteger('minutos') * 60 * 1000);
+                    return interaction.reply({ embeds: [emb('Mutado', `${u.tag} — ${options.getInteger('minutos')}min`, { thumb: BLUU.face })] });
+                }
+                if (sub === 'warn') {
+                    if (!member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return interaction.reply({ content: 'Sem permissao.', ephemeral: true });
+                    const u = options.getUser('usuario');
+                    const motivo = options.getString('motivo') || 'Sem motivo';
+                    const key = `${guild.id}:${u.id}`;
+                    const list = warns.get(key) || [];
+                    list.push({ motivo, by: user.id, at: Date.now() });
+                    warns.set(key, list);
+                    persistWarns();
+                    return interaction.reply({ embeds: [emb('Warn', `**${u.tag}** — ${motivo}\nTotal: **${list.length}**`, { thumb: BLUU.face })] });
                 }
             }
-            if (sub === 'desbanir') {
-                if (!member.permissions.has(PermissionsBitField.Flags.BanMembers)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                try {
-                    await guild.bans.remove(options.getString('id'));
-                    return interaction.reply({ embeds: [emb('✅ Desbanido', options.getString('id'), { thumb: BLUU.face })] });
-                } catch {
-                    return interaction.reply({ content: 'Falha.', ephemeral: true });
-                }
-            }
-            if (sub === 'mutar') {
-                if (!member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                const u = options.getUser('usuario');
-                const m = await guild.members.fetch(u.id).catch(() => null);
-                if (!m || !m.moderatable) return interaction.reply({ content: 'Não posso mutar.', ephemeral: true });
-                await m.timeout(options.getInteger('minutos') * 60 * 1000, options.getString('motivo') || 'Mute');
-                return interaction.reply({ embeds: [emb('🔇 Mutado', `**${formatUser(u.id, u.tag)}** — ${options.getInteger('minutos')}min`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'desmutar') {
-                if (!member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                const u = options.getUser('usuario');
-                const m = await guild.members.fetch(u.id).catch(() => null);
-                if (!m) return interaction.reply({ content: 'Não encontrado.', ephemeral: true });
-                await m.timeout(null);
-                return interaction.reply({ embeds: [emb('🔊 Desmutado', formatUser(u.id, u.tag), { thumb: BLUU.face })] });
-            }
-            if (sub === 'lock') {
-                if (!member.permissions.has(PermissionsBitField.Flags.ManageChannels)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                await interaction.channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false });
-                return interaction.reply({ embeds: [emb('🔒 Trancado', null, { thumb: BLUU.face })] });
-            }
-            if (sub === 'unlock') {
-                if (!member.permissions.has(PermissionsBitField.Flags.ManageChannels)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                await interaction.channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null });
-                return interaction.reply({ embeds: [emb('🔓 Liberado', null, { thumb: BLUU.face })] });
-            }
-            if (sub === 'slowmode') {
-                if (!member.permissions.has(PermissionsBitField.Flags.ManageChannels)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                await interaction.channel.setRateLimitPerUser(options.getInteger('segundos'));
-                return interaction.reply({ embeds: [emb('🐌 Slowmode', `${options.getInteger('segundos')}s`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'warn') {
-                if (!member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                const u = options.getUser('usuario');
-                const motivo = options.getString('motivo') || 'Sem motivo';
-                const key = `${guild.id}:${u.id}`;
-                const list = warns.get(key) || [];
-                list.push({ motivo, by: user.id, at: Date.now() });
-                warns.set(key, list);
-                persistWarns();
-                return interaction.reply({ embeds: [emb('⚠️ Warn', `**${formatUser(u.id, u.tag)}** — ${motivo}\nTotal: **${list.length}**`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'warns') {
-                const u = options.getUser('usuario');
-                const list = warns.get(`${guild.id}:${u.id}`) || [];
-                const lines = list.map((w, i) => `**${i + 1}.** ${w.motivo}`).join('\n') || 'Nenhum';
-                return interaction.reply({ embeds: [emb(`Warns — ${u.username}`, lines, { thumb: BLUU.face })] });
-            }
-            if (sub === 'clearwarns') {
-                if (!member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                warns.delete(`${guild.id}:${options.getUser('usuario').id}`);
-                persistWarns();
-                return interaction.reply({ embeds: [emb('♻️ Warns limpos', null, { thumb: BLUU.face })] });
-            }
-            if (sub === 'setnick') {
-                if (!member.permissions.has(PermissionsBitField.Flags.ManageNicknames)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                const u = options.getUser('usuario');
-                const m = await guild.members.fetch(u.id).catch(() => null);
-                if (!m || !m.manageable) return interaction.reply({ content: 'Não posso.', ephemeral: true });
-                await m.setNickname(options.getString('apelido'));
-                return interaction.reply({ embeds: [emb('✏️ Nick', `**${u.tag}** → **${options.getString('apelido')}**`, { thumb: BLUU.face })] });
-            }
+            return;
         }
 
-        // ========== ECO ==========
-        if (cmd === 'eco') {
-            if (sub === 'saldo') {
-                const u = options.getUser('usuario') || user;
-                const c = iniciarConta(u.id);
-                return interaction.reply({ embeds: [emb(`💰 ${formatUser(u.id, u.username)}`, `Carteira: **${c.carteira}** 🪙\nBanco: **${c.banco}** 🏦`, { thumb: u.displayAvatarURL() })] });
-            }
-            if (sub === 'daily') {
-                const cd = checkCd(user.id, 'daily', 24 * 60 * 60 * 1000);
-                if (cd) return interaction.reply({ content: `Espere **${formatTime(cd)}**.`, ephemeral: true });
-                const c = iniciarConta(user.id);
-                const ganho = 200 + Math.floor(Math.random() * 150);
-                c.carteira += ganho;
-                persistBanco();
-                return interaction.reply({ embeds: [emb('🎁 Daily', `+**${ganho}** 🪙\nSaldo: **${c.carteira}**`, { image: BLUU.dance })] });
-            }
-            if (sub === 'trabalhar') {
-                const cd = checkCd(user.id, 'trabalhar', 15 * 60 * 1000);
-                if (cd) return interaction.reply({ content: `Espere **${formatTime(cd)}**.`, ephemeral: true });
-                const jobs = ['streamar', 'dançar bluudanc', 'farmar', 'entregar pizza'];
-                const ganho = 50 + Math.floor(Math.random() * 100);
-                const c = iniciarConta(user.id);
-                c.carteira += ganho;
-                persistBanco();
-                return interaction.reply({ embeds: [emb('💼 Trabalho', `**${jobs[Math.floor(Math.random() * jobs.length)]}** → **${ganho}** 🪙`, { image: BLUU.dance })] });
-            }
-            if (sub === 'apostar') {
-                const valor = options.getInteger('valor');
-                const c = iniciarConta(user.id);
-                if (c.carteira < valor) return interaction.reply({ content: 'Saldo insuficiente.', ephemeral: true });
-                const win = Math.random() < 0.45;
-                c.carteira += win ? valor : -valor;
-                persistBanco();
-                return interaction.reply({ embeds: [emb(win ? '🎉 Ganhou' : '😢 Perdeu', `${win ? '+' : '-'}${valor} 🪙 · Saldo **${c.carteira}**`, { image: win ? BLUU.dance : BLUU.face })] });
-            }
-            if (sub === 'doar') {
-                const alvo = options.getUser('usuario');
-                const valor = options.getInteger('valor');
-                if (alvo.id === user.id) return interaction.reply({ content: 'Não pode doar pra si.', ephemeral: true });
-                const c = iniciarConta(user.id);
-                const t = iniciarConta(alvo.id);
-                if (c.carteira < valor) return interaction.reply({ content: 'Saldo insuficiente.', ephemeral: true });
-                c.carteira -= valor;
-                t.carteira += valor;
-                persistBanco();
-                return interaction.reply({ embeds: [emb('💝 Doação', `**${valor}** 🪙 → **${formatUser(alvo.id, alvo.username)}**`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'roubar') {
-                const cd = checkCd(user.id, 'roubar', 10 * 60 * 1000);
-                if (cd) return interaction.reply({ content: `Espere **${formatTime(cd)}**.`, ephemeral: true });
-                const alvo = options.getUser('usuario');
-                if (alvo.id === user.id || alvo.bot) return interaction.reply({ content: 'Alvo inválido.', ephemeral: true });
-                const c = iniciarConta(user.id);
-                const t = iniciarConta(alvo.id);
-                if (t.carteira < 50) return interaction.reply({ content: 'Alvo pobre.', ephemeral: true });
-                if (Math.random() < 0.4) {
-                    const q = Math.floor(t.carteira * (0.1 + Math.random() * 0.2));
-                    t.carteira -= q;
-                    c.carteira += q;
-                    persistBanco();
-                    return interaction.reply({ embeds: [emb('🕵️ Roubo', `**${q}** 🪙 de **${formatUser(alvo.id, alvo.username)}**`, { image: BLUU.dance })] });
-                }
-                const multa = Math.min(c.carteira, 30 + Math.floor(Math.random() * 50));
-                c.carteira -= multa;
-                persistBanco();
-                return interaction.reply({ embeds: [emb('🚨 Pego', `Multa **${multa}** 🪙`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'crime') {
-                const cd = checkCd(user.id, 'crime', 8 * 60 * 1000);
-                if (cd) return interaction.reply({ content: `Espere **${formatTime(cd)}**.`, ephemeral: true });
-                const c = iniciarConta(user.id);
-                if (Math.random() < 0.5) {
-                    const g = 80 + Math.floor(Math.random() * 120);
-                    c.carteira += g;
-                    persistBanco();
-                    return interaction.reply({ embeds: [emb('🕶️ Sucesso', `+**${g}** 🪙`, { image: BLUU.dance })] });
-                }
-                const m = Math.min(c.carteira, 40 + Math.floor(Math.random() * 60));
-                c.carteira -= m;
-                persistBanco();
-                return interaction.reply({ embeds: [emb('🚔 Falhou', `−**${m}** 🪙`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'slots') {
-                const valor = options.getInteger('valor');
-                const c = iniciarConta(user.id);
-                if (c.carteira < valor) return interaction.reply({ content: 'Saldo insuficiente.', ephemeral: true });
-                const icons = ['🍒', '🍋', '🍇', '💎', '7️⃣', '💙'];
-                const a = icons[Math.floor(Math.random() * icons.length)];
-                const b = icons[Math.floor(Math.random() * icons.length)];
-                const d = icons[Math.floor(Math.random() * icons.length)];
-                let result = `\` ${a} | ${b} | ${d} \``;
-                if (a === b && b === d) {
-                    const mult = ['💎', '7️⃣', '💙'].includes(a) ? 5 : 3;
-                    c.carteira += valor * mult;
-                    result += `\n🎉 x${mult} +${valor * mult}`;
-                } else {
-                    c.carteira -= valor;
-                    result += `\n−${valor}`;
-                }
-                persistBanco();
-                return interaction.reply({ embeds: [emb('🎰 Slots', `${result}\nSaldo: **${c.carteira}**`, { image: BLUU.dance })] });
-            }
-            if (sub === 'ranking') {
-                const sorted = [...banco.entries()]
-                    .map(([id, v]) => ({ id, total: (v.carteira || 0) + (v.banco || 0) }))
-                    .sort((a, b) => b.total - a.total)
-                    .slice(0, 10);
-                const lines = sorted.map((x, i) => `**${i + 1}.** <@${x.id}> — **${x.total}** 🪙`).join('\n') || 'Vazio';
-                return interaction.reply({ embeds: [emb('🏆 Top Ricos', lines, { image: BLUU.dance })] });
-            }
-            if (sub === 'depositar') {
-                const valor = options.getInteger('valor');
-                const c = iniciarConta(user.id);
-                if (c.carteira < valor) return interaction.reply({ content: 'Saldo insuficiente.', ephemeral: true });
-                c.carteira -= valor;
-                c.banco += valor;
-                persistBanco();
-                return interaction.reply({ embeds: [emb('🏦 Depósito', `**${valor}** 🪙`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'sacar') {
-                const valor = options.getInteger('valor');
-                const c = iniciarConta(user.id);
-                if (c.banco < valor) return interaction.reply({ content: 'Banco insuficiente.', ephemeral: true });
-                c.banco -= valor;
-                c.carteira += valor;
-                persistBanco();
-                return interaction.reply({ embeds: [emb('🏦 Saque', `**${valor}** 🪙`, { thumb: BLUU.face })] });
-            }
-        }
+        // ---- SELECT MENUS ----
+        if (interaction.isStringSelectMenu()) {
+            const id = interaction.customId;
+            const val = interaction.values[0];
+            const { user, guild, member } = interaction;
 
-        // ========== LOJA ==========
-        if (cmd === 'loja') {
-            if (sub === 'ver') {
-                const itens = Object.entries(LOJA_ITENS)
-                    .filter(([, i]) => i.tipo === 'item')
-                    .map(([id, i]) => `${i.emoji} **${id}** — ${i.preco} 🪙\n_${i.desc}_`)
-                    .join('\n\n');
-                const tags = Object.entries(LOJA_ITENS)
-                    .filter(([, i]) => i.tipo === 'tag')
-                    .map(([id, i]) => `${i.emoji} **${i.label}** — ${i.preco} 🪙`)
-                    .join('\n');
-                return interaction.reply({
-                    embeds: [emb('🛒 Loja Bluudud', null, {
-                        image: BLUU.dance,
-                        fields: [
-                            { name: 'Itens', value: itens || '—' },
-                            { name: 'Tags', value: tags || '—' }
-                        ]
-                    })]
-                });
-            }
-            if (sub === 'comprar') {
-                const itemId = options.getString('item');
-                const info = LOJA_ITENS[itemId];
-                if (!info) return interaction.reply({ content: 'Item inválido.', ephemeral: true });
-                const c = iniciarConta(user.id);
-                if (c.carteira < info.preco) return interaction.reply({ content: 'Saldo insuficiente.', ephemeral: true });
-                const inv = getInv(user.id);
-                if (info.tipo === 'tag') {
-                    if (inv.tags.includes(itemId)) return interaction.reply({ content: 'Você já tem essa tag.', ephemeral: true });
-                    inv.tags.push(itemId);
-                } else {
-                    inv[itemId] = (inv[itemId] || 0) + 1;
+            const goBack = async () => interaction.update(painelPrincipal());
+
+            if (id === 'painel_main') {
+                if (val === 'config') {
+                    return interaction.update({
+                        embeds: [emb('Configuracoes', 'Use `/config` para definir canal/mensagem/cargo/tag.\nOu veja as configs atuais abaixo.', { thumb: BLUU.face })],
+                        components: [menuConfig()]
+                    });
                 }
-                c.carteira -= info.preco;
-                persistBanco();
-                persistInventory();
-                return interaction.reply({ embeds: [emb('✅ Compra', `Você comprou ${info.emoji} **${info.label || itemId}**!`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'inventario') {
-                const u = options.getUser('usuario') || user;
-                const inv = getInv(u.id);
-                const items = Object.entries(inv)
-                    .filter(([k, v]) => !['tags', 'equippedTag'].includes(k) && typeof v === 'number' && v > 0)
-                    .map(([k, v]) => `**${k}** x${v}`)
-                    .join('\n') || 'Nenhum item';
-                const tags = (inv.tags || []).map(t => {
-                    const i = LOJA_ITENS[t];
-                    const eq = inv.equippedTag === t ? ' ✅' : '';
-                    return `${i?.emoji || ''} ${i?.label || t}${eq}`;
-                }).join('\n') || 'Nenhuma tag';
-                return interaction.reply({
-                    embeds: [emb(`🎒 ${formatUser(u.id, u.username)}`, null, {
-                        thumb: u.displayAvatarURL(),
-                        fields: [
-                            { name: 'Itens', value: items },
-                            { name: 'Tags', value: tags }
-                        ]
-                    })]
-                });
-            }
-            if (sub === 'usar') {
-                const item = options.getString('item');
-                const inv = getInv(user.id);
-                if (!inv[item] || inv[item] < 1) return interaction.reply({ content: 'Você não tem esse item.', ephemeral: true });
-                inv[item]--;
-                if (inv[item] <= 0) delete inv[item];
-                persistInventory();
-                if (item === 'pocao') {
-                    addXP(user.id, 50);
-                    return interaction.reply({ embeds: [emb('🧪 Poção', '+50 XP!', { image: BLUU.dance })] });
+                if (val === 'mod') {
+                    return interaction.update({
+                        embeds: [emb('Moderacao', 'Acoes rapidas no canal atual.\nBan/kick/mute/warn: use `/mod`.', { thumb: BLUU.face })],
+                        components: [menuMod()]
+                    });
                 }
-                if (item === 'caixa') {
+                if (val === 'eco') {
+                    return interaction.update({
+                        embeds: [emb('Economia', 'Escolha uma acao:', { thumb: BLUU.face })],
+                        components: [menuEco()]
+                    });
+                }
+                if (val === 'loja') {
+                    const lines = Object.entries(LOJA_ITENS).map(([, i]) => `${i.emoji} **${i.label || 'item'}** — ${i.preco} coins`).join('\n');
+                    return interaction.update({
+                        embeds: [emb('Loja Bluudud', lines, { image: BLUU.dance })],
+                        components: [menuLoja()]
+                    });
+                }
+                if (val === 'nivel') {
+                    return interaction.update({
+                        embeds: [emb('Nivel', 'Rank card e leaderboard em imagem:', { thumb: BLUU.face })],
+                        components: [menuNivel()]
+                    });
+                }
+                if (val === 'social') {
+                    return interaction.update({
+                        embeds: [emb('Social', 'Perfil, AFK e mais:', { thumb: BLUU.face })],
+                        components: [menuSocial()]
+                    });
+                }
+                if (val === 'fun') {
+                    return interaction.update({
+                        embeds: [emb('Diversao', 'Escolha:', { thumb: BLUU.face })],
+                        components: [menuFun()]
+                    });
+                }
+                if (val === 'util') {
+                    return interaction.update({
+                        embeds: [emb('Utilidades', 'Escolha:', { thumb: BLUU.face })],
+                        components: [menuUtil()]
+                    });
+                }
+                if (val === 'ai_info') {
+                    return interaction.update({
+                        embeds: [emb('Como usar a IA', [
+                            '1. **Marque o bot** e escreva: `@Bluudud oi tudo bem?`',
+                            '2. **Responda** a mensagem do bot para continuar a conversa',
+                            '3. O historico fica salvo por canal + usuario',
+                            '',
+                            'Mwehehe, bora conversar!'
+                        ].join('\n'), { image: BLUU.dance })],
+                        components: [
+                            new ActionRowBuilder().addComponents(
+                                new StringSelectMenuBuilder()
+                                    .setCustomId('painel_main')
+                                    .setPlaceholder('Voltar ao painel...')
+                                    .addOptions({ label: 'Voltar ao painel', value: 'util', emoji: '◀️' })
+                            )
+                        ]
+                    });
+                }
+            }
+
+            // helpers de resposta efemera em update/followup
+            const replyEmbed = async (title, desc, opts = {}) => {
+                if (interaction.replied || interaction.deferred) {
+                    return interaction.followUp({ embeds: [emb(title, desc, opts)], ephemeral: true });
+                }
+                return interaction.reply({ embeds: [emb(title, desc, opts)], ephemeral: true });
+            };
+
+            if (id === 'painel_config') {
+                if (val === 'back') return goBack();
+                if (val === 'ver') {
+                    const cfg = configBoasVindas.get(guild.id) || {};
+                    const tagLines = cfg.tagRoles
+                        ? Object.entries(cfg.tagRoles).map(([t, rid]) => {
+                            const info = LOJA_ITENS[t];
+                            return `${info?.emoji || ''} ${info?.label || t} → <@&${rid}>`;
+                        }).join('\n') || 'Nenhum'
+                        : 'Nenhum';
+                    return interaction.update({
+                        embeds: [emb('Config atual', null, {
+                            fields: [
+                                { name: 'Canal', value: cfg.canalId ? `<#${cfg.canalId}>` : '—', inline: true },
+                                { name: 'Cargo entrada', value: cfg.cargoId ? `<@&${cfg.cargoId}>` : '—', inline: true },
+                                { name: 'Mensagem', value: cfg.mensagem || 'Padrao' },
+                                { name: 'Tags → Cargos', value: tagLines }
+                            ]
+                        })],
+                        components: [menuConfig()]
+                    });
+                }
+            }
+
+            if (id === 'painel_mod') {
+                if (val === 'back') return goBack();
+                if (val === 'lock') {
+                    if (!member.permissions.has(PermissionsBitField.Flags.ManageChannels)) return interaction.reply({ content: 'Sem permissao.', ephemeral: true });
+                    await interaction.channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false });
+                    return interaction.reply({ embeds: [emb('Canal trancado', null, { thumb: BLUU.face })] });
+                }
+                if (val === 'unlock') {
+                    if (!member.permissions.has(PermissionsBitField.Flags.ManageChannels)) return interaction.reply({ content: 'Sem permissao.', ephemeral: true });
+                    await interaction.channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null });
+                    return interaction.reply({ embeds: [emb('Canal liberado', null, { thumb: BLUU.face })] });
+                }
+                if (val === 'limpar10' || val === 'limpar25') {
+                    if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return interaction.reply({ content: 'Sem permissao.', ephemeral: true });
+                    const q = val === 'limpar10' ? 10 : 25;
+                    await interaction.deferReply({ ephemeral: true });
+                    const deleted = await interaction.channel.bulkDelete(q, true).catch(() => null);
+                    return interaction.editReply(`Apaguei **${deleted?.size || 0}** mensagens.`);
+                }
+            }
+
+            if (id === 'painel_eco') {
+                if (val === 'back') return goBack();
+                if (val === 'saldo') {
+                    const c = iniciarConta(user.id);
+                    return interaction.reply({ embeds: [emb(`Saldo — ${formatUser(user.id, user.username)}`, `Carteira: **${c.carteira}**\nBanco: **${c.banco}**`, { thumb: user.displayAvatarURL() })], ephemeral: true });
+                }
+                if (val === 'daily') {
+                    const cd = checkCd(user.id, 'daily', 24 * 60 * 60 * 1000);
+                    if (cd) return interaction.reply({ content: `Espere **${formatTime(cd)}**.`, ephemeral: true });
+                    const c = iniciarConta(user.id);
+                    const ganho = 200 + Math.floor(Math.random() * 150);
+                    c.carteira += ganho;
+                    persistBanco();
+                    return interaction.reply({ embeds: [emb('Daily', `+**${ganho}** coins\nSaldo: **${c.carteira}**`, { image: BLUU.dance })] });
+                }
+                if (val === 'trabalhar') {
+                    const cd = checkCd(user.id, 'trabalhar', 15 * 60 * 1000);
+                    if (cd) return interaction.reply({ content: `Espere **${formatTime(cd)}**.`, ephemeral: true });
+                    const ganho = 50 + Math.floor(Math.random() * 100);
+                    const c = iniciarConta(user.id);
+                    c.carteira += ganho;
+                    persistBanco();
+                    return interaction.reply({ embeds: [emb('Trabalho', `+**${ganho}** coins`, { image: BLUU.dance })] });
+                }
+                if (val === 'crime') {
+                    const cd = checkCd(user.id, 'crime', 8 * 60 * 1000);
+                    if (cd) return interaction.reply({ content: `Espere **${formatTime(cd)}**.`, ephemeral: true });
+                    const c = iniciarConta(user.id);
+                    if (Math.random() < 0.5) {
+                        const g = 80 + Math.floor(Math.random() * 120);
+                        c.carteira += g;
+                        persistBanco();
+                        return interaction.reply({ embeds: [emb('Crime sucesso', `+**${g}**`, { image: BLUU.dance })] });
+                    }
+                    const m = Math.min(c.carteira, 40 + Math.floor(Math.random() * 60));
+                    c.carteira -= m;
+                    persistBanco();
+                    return interaction.reply({ embeds: [emb('Falhou', `-${m}`, { thumb: BLUU.face })] });
+                }
+                if (val === 'slots50') {
+                    const valor = 50;
+                    const c = iniciarConta(user.id);
+                    if (c.carteira < valor) return interaction.reply({ content: 'Saldo insuficiente.', ephemeral: true });
+                    const icons = ['🍒', '🍋', '🍇', '💎', '7️⃣', '💙'];
+                    const a = icons[Math.floor(Math.random() * icons.length)];
+                    const b = icons[Math.floor(Math.random() * icons.length)];
+                    const d = icons[Math.floor(Math.random() * icons.length)];
+                    let result = `\`${a} | ${b} | ${d}\``;
+                    if (a === b && b === d) {
+                        const mult = ['💎', '7️⃣', '💙'].includes(a) ? 5 : 3;
+                        c.carteira += valor * mult;
+                        result += `\nx${mult} +${valor * mult}`;
+                    } else {
+                        c.carteira -= valor;
+                        result += `\n-${valor}`;
+                    }
+                    persistBanco();
+                    return interaction.reply({ embeds: [emb('Slots', `${result}\nSaldo: **${c.carteira}**`, { image: BLUU.dance })] });
+                }
+                if (val === 'ranking') {
+                    const sorted = [...banco.entries()]
+                        .map(([id, v]) => ({ id, total: (v.carteira || 0) + (v.banco || 0) }))
+                        .sort((a, b) => b.total - a.total)
+                        .slice(0, 10);
+                    const lines = sorted.map((x, i) => `**${i + 1}.** <@${x.id}> — **${x.total}**`).join('\n') || 'Vazio';
+                    return interaction.reply({ embeds: [emb('Top ricos', lines, { image: BLUU.dance })] });
+                }
+            }
+
+            if (id === 'painel_loja') {
+                if (val === 'back') return goBack();
+                if (val === 'inv') {
+                    const inv = getInv(user.id);
+                    const items = Object.entries(inv)
+                        .filter(([k, v]) => !['tags', 'equippedTag'].includes(k) && typeof v === 'number' && v > 0)
+                        .map(([k, v]) => `**${k}** x${v}`).join('\n') || 'Nenhum item';
+                    const tags = (inv.tags || []).map(t => {
+                        const i = LOJA_ITENS[t];
+                        return `${i?.emoji || ''} ${i?.label || t}${inv.equippedTag === t ? ' (equipada)' : ''}`;
+                    }).join('\n') || 'Nenhuma tag';
+                    return interaction.reply({ embeds: [emb('Inventario', `**Itens**\n${items}\n\n**Tags**\n${tags}`, { thumb: user.displayAvatarURL() })], ephemeral: true });
+                }
+                if (val.startsWith('buy_')) {
+                    const itemId = val.slice(4);
+                    const info = LOJA_ITENS[itemId];
+                    if (!info) return interaction.reply({ content: 'Item invalido.', ephemeral: true });
+                    const c = iniciarConta(user.id);
+                    if (c.carteira < info.preco) return interaction.reply({ content: 'Saldo insuficiente.', ephemeral: true });
+                    const inv = getInv(user.id);
+                    if (info.tipo === 'tag') {
+                        if (inv.tags.includes(itemId)) return interaction.reply({ content: 'Voce ja tem essa tag.', ephemeral: true });
+                        inv.tags.push(itemId);
+                    } else {
+                        inv[itemId] = (inv[itemId] || 0) + 1;
+                    }
+                    c.carteira -= info.preco;
+                    persistBanco();
+                    persistInventory();
+                    return interaction.reply({ embeds: [emb('Compra', `Comprou ${info.emoji} **${info.label || itemId}**!`, { thumb: BLUU.face })] });
+                }
+                if (val.startsWith('eq_')) {
+                    const tag = val === 'eq_none' ? 'none' : val.slice(3);
+                    const inv = getInv(user.id);
+                    if (tag === 'none') {
+                        inv.equippedTag = null;
+                        persistInventory();
+                        const m = await guild.members.fetch(user.id).catch(() => null);
+                        if (m) await applyTagRole(guild, m, null);
+                        return interaction.reply({ embeds: [emb('Tag removida', null, { thumb: BLUU.face })] });
+                    }
+                    if (!inv.tags.includes(tag)) return interaction.reply({ content: 'Voce nao tem essa tag. Compre na loja.', ephemeral: true });
+                    inv.equippedTag = tag;
+                    persistInventory();
+                    const m = await guild.members.fetch(user.id).catch(() => null);
+                    if (m) await applyTagRole(guild, m, tag);
+                    const info = LOJA_ITENS[tag];
+                    return interaction.reply({ embeds: [emb('Tag equipada', `${info.emoji} **${info.label}**`, { image: BLUU.dance })] });
+                }
+                if (val === 'use_pocao' || val === 'use_caixa') {
+                    const item = val === 'use_pocao' ? 'pocao' : 'caixa';
+                    const inv = getInv(user.id);
+                    if (!inv[item] || inv[item] < 1) return interaction.reply({ content: 'Voce nao tem esse item.', ephemeral: true });
+                    inv[item]--;
+                    if (inv[item] <= 0) delete inv[item];
+                    persistInventory();
+                    if (item === 'pocao') {
+                        addXP(user.id, 50);
+                        return interaction.reply({ embeds: [emb('Pocao', '+50 XP!', { image: BLUU.dance })] });
+                    }
                     const g = 50 + Math.floor(Math.random() * 250);
                     const c = iniciarConta(user.id);
                     c.carteira += g;
                     persistBanco();
-                    return interaction.reply({ embeds: [emb('📦 Caixa', `+**${g}** 🪙`, { image: BLUU.dance })] });
+                    return interaction.reply({ embeds: [emb('Caixa', `+**${g}** coins`, { image: BLUU.dance })] });
                 }
-                return interaction.reply({ embeds: [emb('✅ Usado', item, { thumb: BLUU.face })] });
             }
-            if (sub === 'equipar') {
-                const tag = options.getString('tag');
-                const inv = getInv(user.id);
-                if (tag === 'none') {
-                    inv.equippedTag = null;
-                    persistInventory();
-                    const m = await guild.members.fetch(user.id).catch(() => null);
-                    if (m) await applyTagRole(guild, m, null);
-                    return interaction.reply({ embeds: [emb('🏷️ Tag removida', null, { thumb: BLUU.face })] });
-                }
-                if (!inv.tags.includes(tag)) return interaction.reply({ content: 'Você não possui essa tag. Compre em `/loja comprar`.', ephemeral: true });
-                inv.equippedTag = tag;
-                persistInventory();
-                const m = await guild.members.fetch(user.id).catch(() => null);
-                if (m) await applyTagRole(guild, m, tag);
-                const info = LOJA_ITENS[tag];
-                return interaction.reply({ embeds: [emb('🏷️ Tag equipada', `${info.emoji} **${info.label}**`, { image: BLUU.dance })] });
-            }
-        }
 
-        // ========== NÍVEL ==========
-        if (cmd === 'nivel') {
-            if (sub === 'rank') {
-                await interaction.deferReply();
-                const u = options.getUser('usuario') || user;
-                const lv = getLevelData(u.id);
-                const c = iniciarConta(u.id);
-                const rep = reps.get(u.id) || 0;
-                const tag = getTagDisplay(u.id);
-                try {
-                    const buf = await generateProfileCard(u, lv, c.carteira + c.banco, rep, tag);
-                    const file = new AttachmentBuilder(buf, { name: 'rank.png' });
-                    return interaction.editReply({ files: [file] });
-                } catch (e) {
-                    console.error('rank img', e);
-                    const needed = xpForLevel(lv.level);
-                    return interaction.editReply({
-                        embeds: [emb(`📊 ${formatUser(u.id, u.username)}`, `Nível **${lv.level}** · ${lv.xp}/${needed} XP`, { thumb: u.displayAvatarURL() })]
-                    });
-                }
-            }
-            if (sub === 'top') {
-                await interaction.deferReply();
-                const sorted = [...levels.entries()]
-                    .map(([id, v]) => ({ id, level: v.level || 1, xp: v.xp || 0 }))
-                    .sort((a, b) => b.level - a.level || b.xp - a.xp)
-                    .slice(0, 10);
-
-                const entries = [];
-                for (const x of sorted) {
-                    let username = x.id;
-                    let avatarURL = null;
+            if (id === 'painel_nivel') {
+                if (val === 'back') return goBack();
+                if (val === 'rank') {
+                    await interaction.deferReply();
+                    const lv = getLevelData(user.id);
+                    const c = iniciarConta(user.id);
+                    const rep = reps.get(user.id) || 0;
+                    const tag = getTagDisplay(user.id);
                     try {
-                        const u = await client.users.fetch(x.id);
-                        username = u.username;
-                        avatarURL = u.displayAvatarURL({ extension: 'png', size: 128 });
-                    } catch {}
-                    entries.push({
-                        username,
-                        avatarURL,
-                        level: x.level,
-                        xp: x.xp,
-                        tag: getTagDisplay(x.id)
-                    });
+                        const buf = await generateProfileCard(user, lv, c.carteira + c.banco, rep, tag);
+                        return interaction.editReply({ files: [new AttachmentBuilder(buf, { name: 'rank.png' })] });
+                    } catch {
+                        return interaction.editReply({ embeds: [emb('Rank', `Nivel **${lv.level}** · ${lv.xp} XP`, { thumb: user.displayAvatarURL() })] });
+                    }
                 }
-                try {
-                    const buf = await generateLeaderboardCard(entries, '🏆 Top Níveis · Bluudud');
-                    const file = new AttachmentBuilder(buf, { name: 'leaderboard.png' });
-                    return interaction.editReply({ files: [file] });
-                } catch (e) {
-                    console.error('top img', e);
-                    const lines = entries.map((e, i) => `**${i + 1}.** ${e.tag ? `[${e.tag}] ` : ''}${e.username} — Nv ${e.level}`).join('\n');
-                    return interaction.editReply({ embeds: [emb('🏆 Top Níveis', lines || 'Vazio', { image: BLUU.dance })] });
-                }
-            }
-            if (sub === 'set') {
-                if (!member.permissions.has(PermissionsBitField.Flags.ManageGuild)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                const u = options.getUser('usuario');
-                const data = getLevelData(u.id);
-                data.level = options.getInteger('nivel');
-                data.xp = 0;
-                persistLevels();
-                return interaction.reply({ embeds: [emb('✅ Nível', `${formatUser(u.id, u.username)} → **${data.level}**`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'reset') {
-                if (!member.permissions.has(PermissionsBitField.Flags.ManageGuild)) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
-                const u = options.getUser('usuario');
-                levels.set(u.id, { xp: 0, level: 1 });
-                persistLevels();
-                return interaction.reply({ embeds: [emb('♻️ Reset', formatUser(u.id, u.username), { thumb: BLUU.face })] });
-            }
-        }
-
-        // ========== SOCIAL ==========
-        if (cmd === 'social') {
-            if (sub === 'perfil') {
-                await interaction.deferReply();
-                const u = options.getUser('usuario') || user;
-                const lv = getLevelData(u.id);
-                const c = iniciarConta(u.id);
-                const rep = reps.get(u.id) || 0;
-                const tag = getTagDisplay(u.id);
-                try {
-                    const buf = await generateProfileCard(u, lv, c.carteira + c.banco, rep, tag);
-                    const file = new AttachmentBuilder(buf, { name: 'perfil.png' });
-                    const casado = marriages.get(u.id);
-                    const status = customStatus.get(u.id) || '—';
-                    return interaction.editReply({
-                        embeds: [emb(`👤 ${formatUser(u.id, u.username)}`, `Status: ${status}\nCasado: ${casado ? `<@${casado}>` : 'Solteiro(a)'}`, { footer: 'Bluudud · perfil' })],
-                        files: [file]
-                    });
-                } catch (e) {
-                    console.error('perfil img', e);
-                    return interaction.editReply({
-                        embeds: [emb(`👤 ${formatUser(u.id, u.username)}`, `Nv ${lv.level} · ${c.carteira + c.banco} 🪙 · ${rep} rep`, { thumb: u.displayAvatarURL(), image: BLUU.dance })]
-                    });
+                if (val === 'top') {
+                    await interaction.deferReply();
+                    const sorted = [...levels.entries()]
+                        .map(([id, v]) => ({ id, level: v.level || 1, xp: v.xp || 0 }))
+                        .sort((a, b) => b.level - a.level || b.xp - a.xp)
+                        .slice(0, 10);
+                    const entries = [];
+                    for (const x of sorted) {
+                        let username = x.id, avatarURL = null;
+                        try {
+                            const u = await client.users.fetch(x.id);
+                            username = u.username;
+                            avatarURL = u.displayAvatarURL({ extension: 'png', size: 128 });
+                        } catch {}
+                        entries.push({ username, avatarURL, level: x.level, xp: x.xp, tag: getTagDisplay(x.id) });
+                    }
+                    try {
+                        const buf = await generateLeaderboardCard(entries);
+                        return interaction.editReply({ files: [new AttachmentBuilder(buf, { name: 'top.png' })] });
+                    } catch {
+                        const lines = entries.map((e, i) => `**${i + 1}.** ${e.username} — Nv ${e.level}`).join('\n');
+                        return interaction.editReply({ embeds: [emb('Top niveis', lines || 'Vazio')] });
+                    }
                 }
             }
-            if (sub === 'rep') {
-                const alvo = options.getUser('usuario');
-                if (alvo.id === user.id) return interaction.reply({ content: 'Não pode dar rep pra si.', ephemeral: true });
-                const cd = checkCd(user.id, 'rep', 12 * 60 * 60 * 1000);
-                if (cd) return interaction.reply({ content: `Espere **${formatTime(cd)}**.`, ephemeral: true });
-                reps.set(alvo.id, (reps.get(alvo.id) || 0) + 1);
-                persistReps();
-                return interaction.reply({ embeds: [emb('⭐ Rep', `+1 para **${formatUser(alvo.id, alvo.username)}**`, { thumb: BLUU.face })] });
+
+            if (id === 'painel_social') {
+                if (val === 'back') return goBack();
+                if (val === 'perfil') {
+                    await interaction.deferReply();
+                    const lv = getLevelData(user.id);
+                    const c = iniciarConta(user.id);
+                    const rep = reps.get(user.id) || 0;
+                    const tag = getTagDisplay(user.id);
+                    try {
+                        const buf = await generateProfileCard(user, lv, c.carteira + c.banco, rep, tag);
+                        return interaction.editReply({ files: [new AttachmentBuilder(buf, { name: 'perfil.png' })] });
+                    } catch {
+                        return interaction.editReply({ embeds: [emb('Perfil', formatUser(user.id, user.username), { thumb: user.displayAvatarURL() })] });
+                    }
+                }
+                if (val === 'afk') {
+                    afkMap.set(user.id, 'AFK');
+                    return interaction.reply({ embeds: [emb('AFK', 'Status AFK ativado. Mande qualquer msg para sair.', { thumb: BLUU.face })] });
+                }
+                if (val === 'unafk') {
+                    afkMap.delete(user.id);
+                    return interaction.reply({ embeds: [emb('AFK removido', null, { thumb: BLUU.face })] });
+                }
+                if (val === 'divorciar') {
+                    if (!marriages.has(user.id)) return interaction.reply({ content: 'Voce nao esta casado.', ephemeral: true });
+                    const outro = marriages.get(user.id);
+                    marriages.delete(user.id);
+                    marriages.delete(outro);
+                    persistMarriages();
+                    return interaction.reply({ embeds: [emb('Divorcio', null, { thumb: BLUU.face })] });
+                }
             }
-            if (sub === 'casar') {
-                const alvo = options.getUser('usuario');
-                if (alvo.id === user.id || alvo.bot) return interaction.reply({ content: 'Inválido.', ephemeral: true });
-                if (marriages.has(user.id) || marriages.has(alvo.id)) return interaction.reply({ content: 'Alguém já casado.', ephemeral: true });
-                const inv = getInv(user.id);
-                if (!inv.anel || inv.anel < 1) return interaction.reply({ content: 'Precisa de um **anel** (`/loja comprar`).', ephemeral: true });
-                inv.anel--;
-                if (inv.anel <= 0) delete inv.anel;
-                marriages.set(user.id, alvo.id);
-                marriages.set(alvo.id, user.id);
-                persistInventory();
-                persistMarriages();
-                return interaction.reply({ embeds: [emb('💍 Casamento', `**${formatUser(user.id, user.username)}** ❤️ **${formatUser(alvo.id, alvo.username)}**`, { image: BLUU.dance })] });
+
+            if (id === 'painel_fun') {
+                if (val === 'back') return goBack();
+                if (val === 'meme') return interaction.reply({ embeds: [emb('Meme', 'tem bluudude get in nowww!!!', { image: BLUU.dance })] });
+                if (val === 'dado') return interaction.reply({ embeds: [emb('Dado', `**${1 + Math.floor(Math.random() * 6)}**`, { thumb: BLUU.face })] });
+                if (val === 'moeda') return interaction.reply({ embeds: [emb('Moeda', Math.random() < 0.5 ? 'Cara' : 'Coroa', { image: BLUU.dance })] });
+                if (val === 'piada') {
+                    const list = ['Por que o Bluudud nao usa espada? Prefere pirulito.', 'O que fala no mic? Mwehehe!'];
+                    return interaction.reply({ embeds: [emb('Piada', list[Math.floor(Math.random() * list.length)], { thumb: BLUU.face })] });
+                }
+                if (val === 'cantada') return interaction.reply({ embeds: [emb('Cantada', 'Things are getting a whole lot bluer…', { image: BLUU.dance })] });
+                if (val === 'bluudanc') return interaction.reply({ embeds: [emb('Bluudanc', 'yayyy wahooo weeeeee', { image: BLUU.dance })] });
+                if (val === 'howgay' || val === 'rizz') {
+                    const n = Math.floor(Math.random() * 101);
+                    return interaction.reply({ embeds: [emb(val === 'howgay' ? 'How gay' : 'Rizz', `**${user.username}**: **${n}%**`, { thumb: BLUU.face })] });
+                }
             }
-            if (sub === 'divorciar') {
-                if (!marriages.has(user.id)) return interaction.reply({ content: 'Você não está casado.', ephemeral: true });
-                const outro = marriages.get(user.id);
-                marriages.delete(user.id);
-                marriages.delete(outro);
-                persistMarriages();
-                return interaction.reply({ embeds: [emb('💔 Divórcio', null, { thumb: BLUU.face })] });
-            }
-            if (sub === 'status') {
-                customStatus.set(user.id, options.getString('texto').slice(0, 100));
-                return interaction.reply({ embeds: [emb('📝 Status', options.getString('texto'), { thumb: BLUU.face })] });
-            }
-            if (sub === 'afk') {
-                afkMap.set(user.id, options.getString('motivo') || 'AFK');
-                return interaction.reply({ embeds: [emb('💤 AFK', afkMap.get(user.id), { thumb: BLUU.face })] });
+
+            if (id === 'painel_util') {
+                if (val === 'back' || val === 'util') return goBack();
+                if (val === 'ping') return interaction.reply({ embeds: [emb('Ping', `API: **${client.ws.ping}ms**`, { thumb: BLUU.face })] });
+                if (val === 'ajuda') {
+                    return interaction.reply({
+                        embeds: [emb('Ajuda', [
+                            '**/painel** — menu com todas as opcoes',
+                            '**/config** · **/mod** — staff',
+                            '**IA:** marque o bot ou responda a mensagem dele',
+                            'Site: daily, rank universal e chat IA'
+                        ].join('\n'), { image: BLUU.dance })]
+                    });
+                }
+                if (val === 'serverinfo') {
+                    return interaction.reply({
+                        embeds: [emb(guild.name, null, {
+                            thumb: guild.iconURL({ size: 128 }),
+                            fields: [
+                                { name: 'Membros', value: `${guild.memberCount}`, inline: true },
+                                { name: 'Criado', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:R>`, inline: true }
+                            ]
+                        })]
+                    });
+                }
+                if (val === 'uptime') {
+                    const s = Math.floor(process.uptime());
+                    return interaction.reply({ embeds: [emb('Uptime', `**${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m**`, { thumb: BLUU.face })] });
+                }
+                if (val === 'convite') {
+                    const url = `https://discord.com/api/oauth2/authorize?client_id=${client.user.id}&permissions=8&scope=bot%20applications.commands`;
+                    return interaction.reply({ embeds: [emb('Convite', `[Clique aqui](${url})`, { image: BLUU.dance })] });
+                }
             }
         }
-
-        // ========== FUN ==========
-        if (cmd === 'fun') {
-            if (sub === 'meme') return interaction.reply({ embeds: [emb('😂', 'tem bluudude get in nowww!!!', { image: BLUU.dance })] });
-            if (sub === 'dado') {
-                const lados = options.getInteger('lados') || 6;
-                return interaction.reply({ embeds: [emb('🎲', `d${lados}: **${1 + Math.floor(Math.random() * lados)}**`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'moeda') return interaction.reply({ embeds: [emb('🪙', Math.random() < 0.5 ? 'Cara' : 'Coroa', { image: BLUU.dance })] });
-            if (sub === '8ball') {
-                const r = ['Sim', 'Não', 'Talvez', 'Com certeza', 'Mwehehe... não', 'Pergunta de novo'];
-                return interaction.reply({ embeds: [emb('🎱', r[Math.floor(Math.random() * r.length)], { thumb: BLUU.face })] });
-            }
-            if (sub === 'ship') {
-                const u1 = options.getUser('user1'), u2 = options.getUser('user2');
-                const pct = Math.floor(Math.random() * 101);
-                const bar = '█'.repeat(Math.floor(pct / 10)) + '░'.repeat(10 - Math.floor(pct / 10));
-                return interaction.reply({ embeds: [emb('💘', `**${u1.username}** + **${u2.username}**\n\`${bar}\` **${pct}%**`, { image: BLUU.dance })] });
-            }
-            if (sub === 'abracar') return interaction.reply({ embeds: [emb('🤗', `**${user.username}** abraçou **${options.getUser('usuario').username}**`, { image: BLUU.dance })] });
-            if (sub === 'beijar') return interaction.reply({ embeds: [emb('💋', `**${user.username}** beijou **${options.getUser('usuario').username}**`, { image: BLUU.dance })] });
-            if (sub === 'tapa') return interaction.reply({ embeds: [emb('👋', `**${user.username}** deu tapa em **${options.getUser('usuario').username}**`, { image: BLUU.dance })] });
-            if (sub === 'cantada') {
-                const list = ['Things are getting a whole lot bluer…', 'Tem bluudude no coração — get in nowww!!!'];
-                return interaction.reply({ embeds: [emb('😏', list[Math.floor(Math.random() * list.length)], { image: BLUU.dance })] });
-            }
-            if (sub === 'piada') {
-                const list = ['Por que o Bluudud não usa espada? Prefere pirulito.', 'O que fala no mic? Mwehehe!'];
-                return interaction.reply({ embeds: [emb('🤣', list[Math.floor(Math.random() * list.length)], { thumb: BLUU.face })] });
-            }
-            if (sub === 'howgay' || sub === 'rizz') {
-                const u = options.getUser('usuario') || user;
-                const n = Math.floor(Math.random() * 101);
-                return interaction.reply({ embeds: [emb(sub === 'howgay' ? '🏳️‍🌈' : '😎', `**${formatUser(u.id, u.username)}**: **${n}%**`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'jokenpo') {
-                const escolha = options.getString('escolha');
-                const bot = ['pedra', 'papel', 'tesoura'][Math.floor(Math.random() * 3)];
-                let res = 'Empate!';
-                if ((escolha === 'pedra' && bot === 'tesoura') || (escolha === 'papel' && bot === 'pedra') || (escolha === 'tesoura' && bot === 'papel')) res = 'Você ganhou!';
-                else if (escolha !== bot) res = 'Bluudud ganhou! Mwehehe';
-                return interaction.reply({ embeds: [emb('✊', `Você: **${escolha}** · Bot: **${bot}**\n${res}`, { image: BLUU.dance })] });
-            }
-            if (sub === 'bluudanc') return interaction.reply({ embeds: [emb('💙 Bluudanc', 'yayyy wahooo weeeeee', { image: BLUU.dance })] });
-            if (sub === 'pp') {
-                const u = options.getUser('usuario') || user;
-                const size = 1 + Math.floor(Math.random() * 15);
-                return interaction.reply({ embeds: [emb('📏', `**${u.username}**: 8${'='.repeat(size)}D`, { thumb: BLUU.face })] });
-            }
-        }
-
-        // ========== UTIL ==========
-        if (cmd === 'util') {
-            if (sub === 'ping') {
-                const sent = await interaction.reply({ embeds: [emb('🏓', `API: **${client.ws.ping}ms**`, { thumb: BLUU.face })], fetchReply: true });
-                return interaction.editReply({ embeds: [emb('🏓', `API: **${client.ws.ping}ms**\nLatência: **${sent.createdTimestamp - interaction.createdTimestamp}ms**`, { image: BLUU.dance })] });
-            }
-            if (sub === 'ajuda') {
-                return interaction.reply({
-                    embeds: [emb('📘 Ajuda Bluudud', null, {
-                        image: BLUU.dance,
-                        fields: [
-                            { name: '⚙️ /config', value: 'boasvindas, mensagem, cargo, tag-cargo, ver' },
-                            { name: '🛡️ /mod', value: 'limpar, banir, mutar, lock, warn...' },
-                            { name: '💰 /eco', value: 'saldo, daily, slots, ranking...' },
-                            { name: '🛒 /loja', value: 'ver, comprar, equipar, inventario' },
-                            { name: '📊 /nivel', value: 'rank, top (com imagem!)' },
-                            { name: '👤 /social', value: 'perfil (imagem), rep, casar, afk' },
-                            { name: '😂 /fun', value: 'meme, ship, jokenpo, bluudanc...' },
-                            { name: '🤖 /ai', value: 'falar, traduzir, resumir, corrigir' }
-                        ]
-                    })]
-                });
-            }
-            if (sub === 'serverinfo') {
-                return interaction.reply({
-                    embeds: [emb(guild.name, null, {
-                        thumb: guild.iconURL({ size: 128 }),
-                        fields: [
-                            { name: 'Membros', value: `${guild.memberCount}`, inline: true },
-                            { name: 'Criado', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:R>`, inline: true },
-                            { name: 'Dono', value: `<@${guild.ownerId}>`, inline: true }
-                        ]
-                    })]
-                });
-            }
-            if (sub === 'userinfo') {
-                const u = options.getUser('usuario') || user;
-                const m = await guild.members.fetch(u.id).catch(() => null);
-                return interaction.reply({
-                    embeds: [emb(formatUser(u.id, u.tag), null, {
-                        thumb: u.displayAvatarURL({ size: 256 }),
-                        fields: [
-                            { name: 'ID', value: u.id, inline: true },
-                            { name: 'Entrou', value: m ? `<t:${Math.floor(m.joinedTimestamp / 1000)}:R>` : '—', inline: true },
-                            { name: 'Conta', value: `<t:${Math.floor(u.createdTimestamp / 1000)}:R>`, inline: true }
-                        ]
-                    })]
-                });
-            }
-            if (sub === 'avatar') {
-                const u = options.getUser('usuario') || user;
-                return interaction.reply({ embeds: [emb(`Avatar — ${u.username}`, null, { image: u.displayAvatarURL({ size: 512 }) })] });
-            }
-            if (sub === 'uptime') {
-                const s = Math.floor(process.uptime());
-                return interaction.reply({ embeds: [emb('⏱️', `**${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m ${s % 60}s**`, { thumb: BLUU.face })] });
-            }
-            if (sub === 'convite') {
-                const perms = [
-                    PermissionsBitField.Flags.ManageChannels,
-                    PermissionsBitField.Flags.KickMembers,
-                    PermissionsBitField.Flags.BanMembers,
-                    PermissionsBitField.Flags.ManageMessages,
-                    PermissionsBitField.Flags.ModerateMembers,
-                    PermissionsBitField.Flags.ManageNicknames,
-                    PermissionsBitField.Flags.ManageRoles,
-                    PermissionsBitField.Flags.SendMessages,
-                    PermissionsBitField.Flags.EmbedLinks,
-                    PermissionsBitField.Flags.AttachFiles,
-                    PermissionsBitField.Flags.ReadMessageHistory,
-                    PermissionsBitField.Flags.AddReactions
-                ].reduce((a, b) => a | b, 0n);
-                const url = `https://discord.com/api/oauth2/authorize?client_id=${client.user.id}&permissions=${perms}&scope=bot%20applications.commands`;
-                return interaction.reply({ embeds: [emb('🔗 Convite', `[Clique aqui](${url})`, { image: BLUU.dance })] });
-            }
-            if (sub === 'senha') {
-                const len = options.getInteger('tamanho') || 16;
-                const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*';
-                let s = '';
-                for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
-                return interaction.reply({ embeds: [emb('🔐', `\`${s}\``, { thumb: BLUU.face })], ephemeral: true });
-            }
-        }
-
-        // ========== AI ==========
-        if (cmd === 'ai') {
-            if (sub === 'falar') {
-                await interaction.deferReply();
-                const reply = await askGroq(options.getString('mensagem'));
-                return interaction.editReply({ embeds: [emb('🤖 Bluudud AI', reply, { image: BLUU.dance, footer: 'Groq' })] });
-            }
-            if (sub === 'traduzir') {
-                await interaction.deferReply();
-                const idioma = options.getString('idioma') || 'português';
-                const reply = await askGroq(`Traduza para ${idioma}:\n\n${options.getString('texto')}`, 'Apenas a tradução.');
-                return interaction.editReply({ embeds: [emb('🌐', reply, { thumb: BLUU.face })] });
-            }
-            if (sub === 'resumir') {
-                await interaction.deferReply();
-                const reply = await askGroq(`Resuma:\n\n${options.getString('texto')}`, 'Apenas o resumo.');
-                return interaction.editReply({ embeds: [emb('📝', reply, { thumb: BLUU.face })] });
-            }
-            if (sub === 'corrigir') {
-                await interaction.deferReply();
-                const reply = await askGroq(`Corrija gramática:\n\n${options.getString('texto')}`, 'Apenas o texto corrigido.');
-                return interaction.editReply({ embeds: [emb('✏️', reply, { thumb: BLUU.face })] });
-            }
-        }
-
     } catch (err) {
-        console.error(`Erro /${cmd} ${sub}:`, err);
-        const payload = { content: 'Erro ao executar o comando.', ephemeral: true };
+        console.error('Interaction error:', err);
+        const payload = { content: 'Erro ao executar.', ephemeral: true };
         if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => {});
         else await interaction.reply(payload).catch(() => {});
     }
@@ -1415,7 +1199,7 @@ client.login(process.env.TOKEN).catch(err => {
     process.exit(1);
 });
 
-// ==================== EXPRESS ====================
+// ==================== EXPRESS (DEPOIS do client) ====================
 const app = express();
 app.set('trust proxy', 1);
 const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RENDER;
@@ -1462,12 +1246,14 @@ app.get('/callback', async (req, res) => {
 });
 
 app.get('/logout', (req, res) => req.session.destroy(() => res.redirect('/')));
+
 app.get('/api/me', (req, res) => {
-    if (!req.session.user) return res.status(401).json({ error: 'Não autenticado' });
+    if (!req.session.user) return res.status(401).json({ error: 'Nao autenticado' });
     res.json(req.session.user);
 });
+
 app.get('/api/servers', async (req, res) => {
-    if (!req.session.token) return res.status(401).json({ error: 'Não autenticado' });
+    if (!req.session.token) return res.status(401).json({ error: 'Nao autenticado' });
     try {
         const response = await axios.get('https://discord.com/api/v10/users/@me/guilds', { headers: { Authorization: `Bearer ${req.session.token}` } });
         const ADMIN = 0x8n, MANAGE = 0x20n;
@@ -1479,10 +1265,49 @@ app.get('/api/servers', async (req, res) => {
         res.status(500).json({ error: 'Erro' });
     }
 });
+
+app.get('/api/welcome/:guildId', (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: 'Nao autenticado' });
+    const cfg = configBoasVindas.get(req.params.guildId) || {};
+    res.json({ channelId: cfg.canalId || null, roleId: cfg.cargoId || null, message: cfg.mensagem || null });
+});
+
+app.post('/api/welcome/:guildId', (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: 'Nao autenticado' });
+    const { channelId, message, roleId } = req.body;
+    if (!configBoasVindas.has(req.params.guildId)) configBoasVindas.set(req.params.guildId, {});
+    const cfg = configBoasVindas.get(req.params.guildId);
+    if (channelId !== undefined) cfg.canalId = channelId || null;
+    if (message !== undefined) cfg.mensagem = message || null;
+    if (roleId !== undefined) cfg.cargoId = roleId || null;
+    persistConfig();
+    res.json({ success: true });
+});
+
+app.post('/api/welcome/:guildId/test', async (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: 'Nao autenticado' });
+    const cfg = configBoasVindas.get(req.params.guildId);
+    if (!cfg?.canalId) return res.status(400).json({ error: 'Nenhum canal configurado' });
+    const g = client.guilds.cache.get(req.params.guildId);
+    if (!g) return res.status(404).json({ error: 'Bot nao esta no servidor' });
+    const ch = g.channels.cache.get(cfg.canalId);
+    if (!ch) return res.status(404).json({ error: 'Canal nao encontrado' });
+    let texto = (cfg.mensagem || 'Seja bem-vindo(a)!')
+        .replace(/{membro}/g, `<@${req.session.user.id}>`)
+        .replace(/{servidor}/g, g.name)
+        .replace(/{total}/g, g.memberCount);
+    try {
+        await ch.send({ embeds: [emb('Teste de boas-vindas', texto, { image: BLUU.dance })] });
+        res.json({ success: true });
+    } catch {
+        res.status(500).json({ error: 'Erro ao enviar' });
+    }
+});
+
 app.post('/api/ai', async (req, res) => {
-    if (!req.session.user) return res.status(401).json({ error: 'Não autenticado' });
+    if (!req.session.user) return res.status(401).json({ error: 'Nao autenticado' });
     const { message } = req.body;
-    if (!message || typeof message !== 'string') return res.status(400).json({ error: 'Inválido' });
+    if (!message || typeof message !== 'string') return res.status(400).json({ error: 'Invalido' });
     try {
         res.json({ reply: await askGroq(message.trim().slice(0, 1000)) });
     } catch {
@@ -1490,5 +1315,81 @@ app.post('/api/ai', async (req, res) => {
     }
 });
 
+// APIs do site — DEPOIS do app = express()
+app.get('/api/profile', (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: 'Nao autenticado' });
+    const id = req.session.user.id;
+    const c = iniciarConta(id);
+    const lv = getLevelData(id);
+    const inv = getInv(id);
+    const rep = reps.get(id) || 0;
+    const key = `${id}:daily`;
+    let dailyCd = 0;
+    if (cooldowns.has(key)) {
+        const left = Math.ceil((cooldowns.get(key) - Date.now()) / 1000);
+        dailyCd = left > 0 ? left : 0;
+    }
+    res.json({
+        id,
+        username: req.session.user.username,
+        global_name: req.session.user.global_name,
+        avatar: req.session.user.avatar,
+        carteira: c.carteira,
+        banco: c.banco,
+        total: c.carteira + c.banco,
+        level: lv.level,
+        xp: lv.xp,
+        xpNeeded: xpForLevel(lv.level),
+        rep,
+        tag: getTagDisplay(id),
+        equippedTag: inv.equippedTag,
+        tags: inv.tags || [],
+        dailyCooldown: dailyCd,
+        marriedTo: marriages.get(id) || null
+    });
+});
+
+app.post('/api/daily', (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: 'Nao autenticado' });
+    const id = req.session.user.id;
+    const cd = checkCd(id, 'daily', 24 * 60 * 60 * 1000);
+    if (cd) return res.status(429).json({ error: 'Aguarde', cooldown: cd });
+    const c = iniciarConta(id);
+    const ganho = 200 + Math.floor(Math.random() * 150);
+    c.carteira += ganho;
+    persistBanco();
+    res.json({ success: true, ganho, saldo: c.carteira });
+});
+
+app.get('/api/rank', (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: 'Nao autenticado' });
+    const sorted = [...levels.entries()]
+        .map(([id, v]) => ({ id, level: v.level || 1, xp: v.xp || 0, tag: getTagDisplay(id) }))
+        .sort((a, b) => b.level - a.level || b.xp - a.xp)
+        .slice(0, 25);
+    const enriched = sorted.map((e, i) => {
+        let username = e.id, avatar = null;
+        for (const g of client.guilds.cache.values()) {
+            const m = g.members.cache.get(e.id);
+            if (m) {
+                username = m.user.username;
+                avatar = m.user.displayAvatarURL({ size: 64 });
+                break;
+            }
+        }
+        return { rank: i + 1, ...e, username, avatar };
+    });
+    const meId = req.session.user.id;
+    const myData = getLevelData(meId);
+    const myPos = [...levels.entries()]
+        .map(([id, v]) => ({ id, level: v.level || 1, xp: v.xp || 0 }))
+        .sort((a, b) => b.level - a.level || b.xp - a.xp)
+        .findIndex(x => x.id === meId) + 1;
+    res.json({
+        top: enriched,
+        me: { id: meId, rank: myPos || null, level: myData.level, xp: myData.xp, tag: getTagDisplay(meId) }
+    });
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🌐 Dashboard na porta ${PORT}`));
+app.listen(PORT, () => console.log(`Dashboard na porta ${PORT}`));
